@@ -1,7 +1,7 @@
 // COMS20001 - Cellular Automaton Farm - Initial Code Skeleton
 // (using the XMOS i2c accelerometer demo code)
 
-#include <platfor m.h>
+#include <platform.h>
 #include <xs1.h>
 #include <stdio.h>
 #include "pgmIO.h"
@@ -68,7 +68,32 @@ void DataInStream(char infname[], chanend c_out)
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
+int sumNeighbors(int pre[IMHT][IMWD], int x, int y) {
+    int total = 0;
+    for (int a = -1; y <= 1; y++) {
+        for (int b = -1; x <= 1; x++) {
+            if (pre[(y+b)%IMHT][(x+a)%IMWD] && !(a == 0 || b == 0)) total++;            
+        }
+    }
+}
+
 void iterate(int array[IMHT][IMWD]) {
+    int pre[IMHT][IMWD];
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 0; x < IMWD; x++) {
+            pre[y][x] = array[y][x];
+        }
+    }
+    
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 0; x < IMWD; x++) {
+            int n = sumNeighbors(pre, x, y);
+            if (n < 2) array[y][x] = 0;
+            if (n == 2 || n == 3) // do nothing
+            if (n > 3) array[y][x] = 0;
+            if (n == 3) array[y][x] = 255;
+        }
+    }
 
 }
 
