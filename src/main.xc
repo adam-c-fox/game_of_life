@@ -68,7 +68,7 @@ void DataInStream(char infname[], chanend c_out)
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void iterate() {
+void iterate(int array[IMHT][IMWD]) {
 
 }
 
