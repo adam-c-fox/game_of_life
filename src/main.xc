@@ -86,13 +86,26 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   //This just inverts every pixel, but you should
   //change the image according to the "Game of Life"
   printf("Processing...\n");
+
+  int grid[IMHT][IMWD];
+
   for (int y = 0; y < IMHT; y++) {   //go through all lines
     for (int x = 0; x < IMWD; x++) { //go through each pixel per line
-      c_in :> val;                    //read the pixel value
-      c_out <: (uchar)(val ^ 0xFF); //send some modified pixel out
+      c_in :> grid[y][x];                    //read the pixel value
+      //c_out <: (uchar)(val ^ 0xFF); //send some modified pixel out
     }
   }
   printf("\nOne processing round completed...\n");
+
+  for (int i = 0; i < 10; i++) {
+    iterate(grid); 
+  }
+
+  for (int y = 0; y < IMHT; y++) {   //go through all lines
+    for (int x = 0; x < IMWD; x++) { //go through each pixel per line
+      c_out <: grid[x][y]; //send some modified pixel out
+    }
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
