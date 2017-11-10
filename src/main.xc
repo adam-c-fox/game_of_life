@@ -68,31 +68,49 @@ void DataInStream(char infname[], chanend c_out)
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
-int sumNeighbors(int pre[IMHT][IMWD], int x, int y) {
+uchar sumNeighbors(uchar pre[IMHT][IMWD], int x, int y) {
     int total = 0;
-    for (int a = -1; y <= 1; y++) {
-        for (int b = -1; x <= 1; x++) {
-            if (pre[(y+b)%IMHT][(x+a)%IMWD] && !(a == 0 || b == 0)) total++;            
+    for (int a = -1; a <= 1; a++) {
+        for (int b = -1; b <= 1; b++) {
+              if (pre[y+b][x+a] != 0) {
+                printf("hahahah: %d\n", pre[y+b][x+a]);
+              }
+
+              if (pre[y+b][x+a] == 255) {
+                printf("haha255: %d\n", pre[y+b][x+a]);
+              }
+
+              if (pre[y+b][x+a] == 255 && !(a == 0 || b == 0)) total++;            
+
         }
     }
+
+    //printf("total: %d\n", total);
+    //printf("pre[y][x]: %d\n", pre[y][x]);
     return total;
 }
 
-void iterate(int array[IMHT][IMWD]) {
-    int pre[IMHT][IMWD];
+void iterate(uchar array[IMHT][IMWD]) {
+    uchar pre[IMHT][IMWD];
     for (int y = 0; y < IMHT; y++) {
         for (int x = 0; x < IMWD; x++) {
             pre[y][x] = array[y][x];
         }
     }
     
-    for (int y = 0; y < IMHT; y++) {
-        for (int x = 0; x < IMWD; x++) {
-            int n = sumNeighbors(pre, x, y);
-            if (n < 2) array[y][x] = 0;
+    for (int y = 1; y < IMHT-1; y++) {
+        for (int x = 1; x < IMWD-1; x++) {
+            uchar n = sumNeighbors(pre, x, y);
+            if (n < 2) {
+              array[y][x] = 255;
+              //printf("less than 2\n");
+            }
             if (n == 2 || n == 3) // do nothing
-            if (n > 3) array[y][x] = 0;
-            if (n == 3) array[y][x] = 255;
+            if (n > 3) array[y][x] = 255;
+            if (n == 3) {
+              array[y][x] = 0;
+              printf("hey xx\n");
+            }
         }
     }
 
@@ -101,6 +119,8 @@ void iterate(int array[IMHT][IMWD]) {
 
 void distributor(chanend c_in, chanend c_out, chanend fromAcc)
 {
+  //uchar val;
+
   //Starting up and wait for  tilting of the xCore-200 Explorer
   printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
   printf("Waiting for  Board Tilt...\n");
@@ -111,23 +131,24 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   //change the image according to the "Game of Life"
   printf("Processing...\n");
 
-  int grid[IMHT][IMWD];
+  uchar grid[IMHT][IMWD];
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
     for (int x = 0; x < IMWD; x++) { //go through each pixel per line
       c_in :> grid[y][x];                    //read the pixel value
+
       //c_out <: (uchar)(val ^ 0xFF); //send some modified pixel out
     }
   }
   printf("\nOne processing round completed...\n");
 
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 1; i++) {
     iterate(grid); 
   }
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
     for (int x = 0; x < IMWD; x++) { //go through each pixel per line
-      c_out <: grid[x][y]; //send some modified pixel out
+      c_out <: (uchar)(grid[x][y] ^ 0xFF); //send some modified pixel out
     }
   }
 }
