@@ -75,6 +75,7 @@ int sumNeighbors(int pre[IMHT][IMWD], int x, int y) {
             if (pre[(y+b)%IMHT][(x+a)%IMWD] && !(a == 0 || b == 0)) total++;            
         }
     }
+    return total;
 }
 
 void iterate(int array[IMHT][IMWD]) {
@@ -100,8 +101,6 @@ void iterate(int array[IMHT][IMWD]) {
 
 void distributor(chanend c_in, chanend c_out, chanend fromAcc)
 {
-  uchar val;
-
   //Starting up and wait for  tilting of the xCore-200 Explorer
   printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
   printf("Waiting for  Board Tilt...\n");
