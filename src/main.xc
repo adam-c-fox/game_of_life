@@ -70,25 +70,27 @@ void DataInStream(char infname[], chanend c_out)
 
 uchar sumNeighbors(uchar pre[IMHT][IMWD], int x, int y) {
     int total = 0;
+
     for (int a = -1; a <= 1; a++) {
         for (int b = -1; b <= 1; b++) {
-              if (pre[y+b][x+a] != 0) {
-                printf("hahahah: %d\n", pre[y+b][x+a]);
-              }
 
-              if (pre[y+b][x+a] == 255) {
-                printf("haha255: %d\n", pre[y+b][x+a]);
-              }
-
-              if (pre[y+b][x+a] == 255 && !(a == 0 || b == 0)) total++;            
-
+          if ((y+b) < 0 && (x+a) < 0) {
+            if (pre[IMHT-1][IMWD-1] != 0) total++; 
+          }
+          else if (((y+b) < 0) && ((x+a) >= 0)) {
+            if (pre[IMHT-1][(x+a) % IMWD] != 0) total++; 
+          }
+          else if ((x+a) < 0 && (y+b) >= 0) {
+            if (pre[(y+b) % IMHT][IMWD-1] != 0) total++; 
+          } 
+          else if (pre[(y+b) % IMHT][(x+a) % IMWD] != 0 && !(a == 0 && b == 0)) total++;
         }
     }
-
-    //printf("total: %d\n", total);
-    //printf("pre[y][x]: %d\n", pre[y][x]);
+    
     return total;
 }
+
+
 
 void iterate(uchar array[IMHT][IMWD]) {
     uchar pre[IMHT][IMWD];
@@ -98,22 +100,19 @@ void iterate(uchar array[IMHT][IMWD]) {
         }
     }
     
-    for (int y = 1; y < IMHT-1; y++) {
-        for (int x = 1; x < IMWD-1; x++) {
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 0; x < IMWD; x++) {
             uchar n = sumNeighbors(pre, x, y);
-            if (n < 2) {
-              array[y][x] = 255;
-              //printf("less than 2\n");
-            }
-            if (n == 2 || n == 3) // do nothing
-            if (n > 3) array[y][x] = 255;
-            if (n == 3) {
-              array[y][x] = 0;
-              printf("hey xx\n");
-            }
+
+            if (n < 2) array[y][x] = 0;
+            //if (n == 2 || n == 3) // do nothing
+            if (n > 3) array[y][x] = 0;
+            if (n == 3) array[y][x] = 255;
         }
     }
 
+    //255 = WHITE
+    //0   = BLACK
 }
 
 
@@ -142,13 +141,13 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   }
   printf("\nOne processing round completed...\n");
 
-  for (int i = 0; i < 1; i++) {
+  for (int i = 0; i < 10; i++) {
     iterate(grid); 
   }
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
     for (int x = 0; x < IMWD; x++) { //go through each pixel per line
-      c_out <: (uchar)(grid[x][y] ^ 0xFF); //send some modified pixel out
+      c_out <: (uchar)(grid[y][x]); //send some modified pixel out
     }
   }
 }
