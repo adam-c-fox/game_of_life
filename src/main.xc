@@ -9,6 +9,7 @@
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
+#define  noOfThreads 4
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
@@ -68,40 +69,32 @@ void DataInStream(char infname[], chanend c_out)
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
-uchar sumNeighbors(uchar pre[IMHT][IMWD], int x, int y) {
+uchar sumNeighbors(uchar pre[IMHT][(IMWD/noOfThreads)+2], int x, int y) {
     int total = 0;
 
     for (int a = -1; a <= 1; a++) {
         for (int b = -1; b <= 1; b++) {
 
-          if ((y+b) < 0 && (x+a) < 0) {
-            if (pre[IMHT-1][IMWD-1] != 0) total++; 
-          }
-          else if (((y+b) < 0) && ((x+a) >= 0)) {
-            if (pre[IMHT-1][(x+a) % IMWD] != 0) total++; 
-          }
-          else if ((x+a) < 0 && (y+b) >= 0) {
-            if (pre[(y+b) % IMHT][IMWD-1] != 0) total++; 
-          } 
-          else if (pre[(y+b) % IMHT][(x+a) % IMWD] != 0 && !(a == 0 && b == 0)) total++;
+          if ((y+b) < 0 && pre[IMHT-1][x+a] != 0) total++;  
+          else if (pre[(y+b) % IMHT][(x+a)] != 0 && !(a == 0 && b == 0)) total++;
         }
     }
     
     return total;
 }
 
+void iterate(uchar array[IMHT][(IMWD/noOfThreads)+2]) {
+    const int ix = IMWD/noOfThreads;
+    uchar pre[IMHT][(IMWD/noOfThreads)+2];
 
-
-void iterate(uchar array[IMHT][IMWD]) {
-    uchar pre[IMHT][IMWD];
     for (int y = 0; y < IMHT; y++) {
-        for (int x = 0; x < IMWD; x++) {
+        for (int x = 0; x < (ix+2); x++) {
             pre[y][x] = array[y][x];
         }
     }
     
     for (int y = 0; y < IMHT; y++) {
-        for (int x = 0; x < IMWD; x++) {
+        for (int x = 1; x <= ix; x++) {
             uchar n = sumNeighbors(pre, x, y);
 
             if (n < 2) array[y][x] = 0;
@@ -113,6 +106,49 @@ void iterate(uchar array[IMHT][IMWD]) {
 
     //255 = WHITE
     //0   = BLACK
+}
+
+void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
+  int colwidth = (IMWD/noOfThreads);
+  uchar grid[IMHT][(IMWD/noOfThreads)+2];
+
+  //Read in corresponding segment of world
+  for (int y = 0; y<IMHT; y++) {
+    for (int x = 1; x<colwidth; x++){
+      dist_in :> grid[y][x];
+    }
+  } 
+
+
+    
+  //Iterate
+  for (int i = 0; i<1; i++) {
+    //If even column: pass to right, then read from left
+    //If odd column : read from left, then pass to right
+    if ((id % 2) == 0) {
+      for (int y = 0; y<IMHT; y++) {
+        c_right <: grid[y][colwidth];
+        c_left :> grid[y][0];
+      }
+    }
+    else {
+      for (int y = 0; y<IMHT; y++) {
+        c_left :> grid[y][0];
+        c_right <: grid[y][colwidth];
+      }
+    }
+
+    iterate(grid);
+
+
+  }
+    
+  //Send out
+  for (int y = 0; y<IMHT; y++) {
+    for (int x = 1; x<colwidth; x++){
+      dist_in <: grid[y][x];
+    }
+  }  
 }
 
 
@@ -141,9 +177,13 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   }
   printf("\nOne processing round completed...\n");
 
-  for (int i = 0; i < 10; i++) {
-    iterate(grid); 
-  }
+  // for (int i = 0; i < 10; i++) {
+  //   iterate(grid); 
+  // }
+
+  
+  
+  
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
     for (int x = 0; x < IMWD; x++) { //go through each pixel per line
