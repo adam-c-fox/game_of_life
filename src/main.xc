@@ -181,9 +181,13 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   //   iterate(grid); 
   // }
 
-  
-  
-  
+  chan dist, c;
+
+  par {
+    colWorker(0, dist, c, c);
+  }
+
+
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
     for (int x = 0; x < IMWD; x++) { //go through each pixel per line
