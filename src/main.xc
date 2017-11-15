@@ -7,9 +7,9 @@
 #include "pgmIO.h"
 #include "i2c.h"
 
-#define  IMHT 16                  //image height
-#define  IMWD 16                  //image width
-#define  noOfThreads 2
+#define  IMHT 256                  //image height
+#define  IMWD 256                  //image width
+#define  noOfThreads 4
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
@@ -50,9 +50,9 @@ void DataInStream(char infname[], chanend c_out)
     _readinline(line, IMWD);
     for (int x = 0; x < IMWD; x++) {
       c_out <: line[x];
-      printf("-%4.1d ", line[x]); //show image values
+      //printf("-%4.1d ", line[x]); //show image values
     }
-    printf("\n");
+    //printf("\n");
   }
 
   //Close PGM image file
@@ -121,7 +121,7 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
   
 
   //Iterate
-  for (int i = 0; i<10000; i++) {
+  for (int i = 0; i<1; i++) {
     //If even column: pass to right, then read from left
     //If odd column : read from left, then pass to right
     if ((id % 2) == 0) {
@@ -226,7 +226,7 @@ void DataOutStream(char outfname[], chanend c_in)
       c_in :> line[x];
     }
     _writeoutline(line, IMWD);
-    printf("DataOutStream: Line written...\n");
+    //printf("DataOutStream: Line written...\n");
   }
 
   //Close the PGM image
@@ -287,7 +287,7 @@ int main(void) {
 
 i2c_master_if i2c[1];               //interface to orientation
 
-char infname[] = "test.pgm";     //put your input image path here
+char infname[] = "256x256.pgm";     //put your input image path here
 char outfname[] = "testout.pgm"; //put your output image path here
 chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
 
@@ -301,8 +301,13 @@ par {
     DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
     distributor(c_inIO, c_outIO, c_control, dist);//thread to coordinate work on image
 
+    //---------------------------------------------------------
+
     colWorker(0, dist[0], worker[0], worker[1]);
-    colWorker(1, dist[1], worker[1], worker[0]);
+    colWorker(1, dist[1], worker[1], worker[2]);
+
+    colWorker(2, dist[2], worker[2], worker[3]);
+    colWorker(3, dist[3], worker[3], worker[0]);
 
   }
 
