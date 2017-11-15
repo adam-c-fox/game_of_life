@@ -9,7 +9,7 @@
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
-#define  noOfThreads 4
+#define  noOfThreads 2
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
@@ -74,9 +74,8 @@ uchar sumNeighbors(uchar pre[IMHT][(IMWD/noOfThreads)+2], int x, int y) {
 
     for (int a = -1; a <= 1; a++) {
         for (int b = -1; b <= 1; b++) {
-
-          if ((y+b) < 0 && pre[IMHT-1][x+a] != 0) total++;  
-          else if (pre[(y+b) % IMHT][(x+a)] != 0 && !(a == 0 && b == 0)) total++;
+          if ((y+b) < 0 && pre[IMHT-1][x+a] != 0) total++;
+          else if ((y+b) >= 0 && pre[(y+b) % IMHT][(x+a)] != 0 && !(a == 0 && b == 0)) total++;
         }
     }
     
@@ -114,48 +113,55 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
 
   //Read in corresponding segment of world
   for (int y = 0; y<IMHT; y++) {
-    for (int x = 1; x<colwidth; x++){
+    for (int x = 1; x <= colwidth; x++){
       dist_in :> grid[y][x];
     }
   } 
 
+  
 
-    
   //Iterate
-  for (int i = 0; i<1; i++) {
+  for (int i = 0; i<10000; i++) {
     //If even column: pass to right, then read from left
     //If odd column : read from left, then pass to right
     if ((id % 2) == 0) {
       for (int y = 0; y<IMHT; y++) {
         c_right <: grid[y][colwidth];
-        c_left :> grid[y][0];
+        c_left  :> grid[y][0];
+
+        c_right :> grid[y][colwidth+1];
+        c_left  <: grid[y][1];
       }
     }
     else {
       for (int y = 0; y<IMHT; y++) {
         c_left :> grid[y][0];
         c_right <: grid[y][colwidth];
+
+        c_left  <: grid[y][1];
+        c_right :> grid[y][colwidth+1];
       }
-    }
+    } 
 
     iterate(grid);
 
 
+    //printf("i: %d\n", i);
   }
     
   //Send out
   for (int y = 0; y<IMHT; y++) {
-    for (int x = 1; x<colwidth; x++){
+    for (int x = 1; x <= colwidth; x++){
+      //printf("hello: %d\n", id);
       dist_in <: grid[y][x];
+
     }
   }  
 }
 
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc)
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads])
 {
-  //uchar val;
-
   //Starting up and wait for  tilting of the xCore-200 Explorer
   printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
   printf("Waiting for  Board Tilt...\n");
@@ -166,34 +172,34 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   //change the image according to the "Game of Life"
   printf("Processing...\n");
 
-  uchar grid[IMHT][IMWD];
+  //uchar grid[IMHT][IMWD];
+  uchar temp;
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
-    for (int x = 0; x < IMWD; x++) { //go through each pixel per line
-      c_in :> grid[y][x];                    //read the pixel value
+    for (int n = 0; n < noOfThreads; n++) {
+      for (int x = 0; x < (IMWD/noOfThreads); x++) { //go through each pixel per line
+        c_in :> temp;
+        fromWorker[n] <: temp;                    //read the pixel value
 
-      //c_out <: (uchar)(val ^ 0xFF); //send some modified pixel out
+        //c_out <: (uchar)(val ^ 0xFF); //send some modified pixel out
+      }
     }
   }
   printf("\nOne processing round completed...\n");
 
-  // for (int i = 0; i < 10; i++) {
-  //   iterate(grid); 
-  // }
-
-  chan dist, c;
-
-  par {
-    colWorker(0, dist, c, c);
-  }
-
 
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
-    for (int x = 0; x < IMWD; x++) { //go through each pixel per line
-      c_out <: (uchar)(grid[y][x]); //send some modified pixel out
+    for (int n = 0; n < noOfThreads; n++) {
+      for (int x = 0; x < (IMWD/noOfThreads); x++) { //go through each pixel per line
+        fromWorker[n] :> temp;                    //read the pixel value
+
+        c_out <: temp;
+      }
     }
   }
+
+
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -285,12 +291,19 @@ char infname[] = "test.pgm";     //put your input image path here
 char outfname[] = "testout.pgm"; //put your output image path here
 chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
 
+//colWorker channels
+chan worker[noOfThreads], dist[noOfThreads];
+
 par {
     i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
     orientation(i2c[0],c_control);        //client thread reading orientation data
     DataInStream(infname, c_inIO);          //thread to read in a PGM image
     DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
-    distributor(c_inIO, c_outIO, c_control);//thread to coordinate work on image
+    distributor(c_inIO, c_outIO, c_control, dist);//thread to coordinate work on image
+
+    colWorker(0, dist[0], worker[0], worker[1]);
+    colWorker(1, dist[1], worker[1], worker[0]);
+
   }
 
   return 0;
