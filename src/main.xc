@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include "pgmIO.h"
 #include "i2c.h"
+#include <assert.h>
 
 #define  IMHT 256                  //image height
 #define  IMWD 256                  //image width
@@ -32,8 +33,7 @@ port p_sda = XS1_PORT_1F;
 // Read Image from PGM file from path infname[] to channel c_out
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void DataInStream(char infname[], chanend c_out)
-{
+void DataInStream(char infname[], chanend c_out) {
   int res;
   uchar line[IMWD];
   printf("DataInStream: Start...\n");
@@ -160,8 +160,7 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
 }
 
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads])
-{
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads]) {
   //Starting up and wait for  tilting of the xCore-200 Explorer
   printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
   printf("Waiting for  Board Tilt...\n");
@@ -207,8 +206,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 // Write pixel stream from channel c_in to PGM image file
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void DataOutStream(char outfname[], chanend c_in)
-{
+void DataOutStream(char outfname[], chanend c_in) {
   int res;
   uchar line[IMWD];
 
@@ -278,38 +276,43 @@ void orientation(client interface i2c_master_if i2c, chanend toDist) {
   }
 }
 
+void test() {
+   assert(2+2==4); 
+   assert(4-3==1);
+   printf("Quick maths\n");
+}
+
+
+
 /////////////////////////////////////////////////////////////////////////////////////////
 //
 // Orchestrate concurrent system and start up all threads
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(void) {
+    test(); 
+    i2c_master_if i2c[1];               //interface to orientation
+    
+    char infname[] = "256x256.pgm";     //put your input image path here
+    char outfname[] = "testout.pgm"; //put your output image path here
+    chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
+    
+    //colWorker channels
+    chan worker[noOfThreads], dist[noOfThreads];
+    
+    par {
+        i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
+        orientation(i2c[0],c_control);        //client thread reading orientation data
+        DataInStream(infname, c_inIO);          //thread to read in a PGM image
+        DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
+        distributor(c_inIO, c_outIO, c_control, dist);//thread to coordinate work on image
+    
+        //TODO: Here we're passing the left channel to be worker[i], which is what we had before,
+        //but shouldn't it be i-1?
+        par (int i = 0; i < noOfThreads; i++) {
+            colWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+        }
+    }
 
-i2c_master_if i2c[1];               //interface to orientation
-
-char infname[] = "256x256.pgm";     //put your input image path here
-char outfname[] = "testout.pgm"; //put your output image path here
-chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
-
-//colWorker channels
-chan worker[noOfThreads], dist[noOfThreads];
-
-par {
-    i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
-    orientation(i2c[0],c_control);        //client thread reading orientation data
-    DataInStream(infname, c_inIO);          //thread to read in a PGM image
-    DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
-    distributor(c_inIO, c_outIO, c_control, dist);//thread to coordinate work on image
-
-    //---------------------------------------------------------
-
-    colWorker(0, dist[0], worker[0], worker[1]);
-    colWorker(1, dist[1], worker[1], worker[2]);
-
-    colWorker(2, dist[2], worker[2], worker[3]);
-    colWorker(3, dist[3], worker[3], worker[0]);
-
-  }
-
-  return 0;
+    return 0;
 }
