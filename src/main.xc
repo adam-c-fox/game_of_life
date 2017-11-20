@@ -34,6 +34,19 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 
 
 
+//DISPLAYS an LED pattern
+int showLEDs(out port p, chanend fromDistributor) {
+  int pattern; //1st bit...separate green LED
+               //2nd bit...blue LED
+               //3rd bit...green LED
+               //4th bit...red LED
+  while (1) {
+    fromDistributor :> pattern;   //receive new pattern
+    p <: pattern;                //send pattern to LED port
+  }
+  return 0;
+}
+
 //READ BUTTONS and send button pattern to userAnt
 void buttonListener(in port b, chanend toDistributor) {
   int r;
@@ -183,22 +196,24 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
 }
 
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons) {
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons, chanend toLEDs) {
   //Starting up and wait for  tilting of the xCore-200 Explorer
   printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
 
   int value = 0;
 
   while (value != 14) {
-  	printf("Waiting for Button Press\n");
+  	//printf("Waiting for Button Press...\n");
+  	printf("Confirm launch...\n");
   	fromButtons :> value;
   }
   
+  toLEDs <: 1;
 
   //Read in and do something with your image values..
   //This just inverts every pixel, but you should
   //change the image according to the "Game of Life"
-  printf("Processing...\n");
+  printf("Reading in image...\n");
 
   //uchar grid[IMHT][IMWD];
   uchar temp;
@@ -215,22 +230,28 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 	  }
 
 
-  printf("\nOne processing round completed...\n");
+  printf("Image read in successfully.\n");
 
   int closed = 0, confirm;
   bool iterating = true;
-  printf("Waiting for second Button Press\n");
+  printf("Waiting for second button press...\n");
 
+  int ledPattern = 5;
 
   while (closed < noOfThreads) {
   	select {
   		case fromWorker[int i] :> confirm:
   			if (iterating) fromWorker[i] <: true;
   			else {
-  				printf("hello\n");
   				fromWorker[i] <: false;
   				closed++;
-  				printf("closed: %d\n", closed);
+  			}
+
+  			if (i == 0) {
+  				toLEDs <: ledPattern;
+
+  				if (ledPattern == 5) ledPattern = 1;
+  				else ledPattern = 5;
   			}
   			break;
   		case fromButtons :> confirm:
@@ -239,8 +260,9 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
   	}
   }
 
+  toLEDs <: 0;
+  printf("Button press confirmed, saving image...\n");
 
-  printf("argh\n");
   for (int i = 0; i<noOfThreads; i++) {
   	fromWorker[i] <: 1;
   }
@@ -286,7 +308,7 @@ void DataOutStream(char outfname[], chanend c_in) {
 
   //Close the PGM image
   _closeoutpgm();
-  printf("DataOutStream: Done...\n");
+  printf("Image saved.\n");
   return;
 }
 
@@ -349,7 +371,7 @@ void test() {
 int main(void) {
     i2c_master_if i2c[1];               //interface to orientation
     chan c_inIO, c_outIO, c_control;
-    chan c_buttons;
+    chan c_buttons, c_leds;
 
     
     //colWorker channels
@@ -360,9 +382,10 @@ int main(void) {
         on tile[0]: orientation(i2c[0],c_control);        //client thread reading orientation data
         on tile[0]: DataInStream("64x64.pgm", c_inIO);          //thread to read in a PGM image
         on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
-        on tile[0]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons);//thread to coordinate work on image
+        on tile[0]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);//thread to coordinate work on image
 
         on tile[0]: buttonListener(buttons, c_buttons);
+        on tile[0]: showLEDs(leds, c_leds);
 
     
         on tile[1]: par (int i = 0; i < noOfThreads; i++) {
