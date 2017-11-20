@@ -8,6 +8,9 @@
 #include "i2c.h"
 #include <assert.h>
 
+on tile[0] : in port buttons = XS1_PORT_4E; //port to access xCore-200 buttons
+on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
+
 #define  IMHT 256                  //image height
 #define  IMWD 256                  //image width
 #define  noOfThreads 4
@@ -27,6 +30,19 @@ port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Y_LSB 0x4
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
+
+
+
+//READ BUTTONS and send button pattern to userAnt
+void buttonListener(in port b, chanend toDistributor) {
+  int r;
+  while (1) {
+    b when pinseq(15)  :> r;    // check that no button is pressed
+    b when pinsneq(15) :> r;    // check if some buttons are pressed
+    if ((r==13) || (r==14))     // if either button is pressed
+    toDistributor <: r;             // send button pattern to userAnt
+  }
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
