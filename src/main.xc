@@ -17,8 +17,8 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
-port p_scl = XS1_PORT_1E;         //interface ports to orientation
-port p_sda = XS1_PORT_1F;
+on tile[0]: port p_scl = XS1_PORT_1E;         //interface ports to orientation
+on tile[0]: port p_sda = XS1_PORT_1F;
 
 #define FXOS8700EQ_I2C_ADDR 0x1E  //register addresses for  orientation
 #define FXOS8700EQ_XYZ_DATA_CFG_REG 0x0E
@@ -306,25 +306,21 @@ void test() {
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(void) {
-    test(); 
     i2c_master_if i2c[1];               //interface to orientation
-    
-    char infname[] = "256x256.pgm";     //put your input image path here
-    char outfname[] = "testout.pgm"; //put your output image path here
     chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
     
     //colWorker channels
     chan worker[noOfThreads], dist[noOfThreads];
     
     par {
-        i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
-        orientation(i2c[0],c_control);        //client thread reading orientation data
-        DataInStream(infname, c_inIO);          //thread to read in a PGM image
-        DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
-        distributor(c_inIO, c_outIO, c_control, dist);//thread to coordinate work on image
+        on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
+        on tile[0]: orientation(i2c[0],c_control);        //client thread reading orientation data
+        on tile[0]: DataInStream("256x256.pgm", c_inIO);          //thread to read in a PGM image
+        on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
+        on tile[0]: distributor(c_inIO, c_outIO, c_control, dist);//thread to coordinate work on image
     
-        par (int i = 0; i < noOfThreads; i++) {(i+1)%noOfThreads
-            colWorker(i, dist[i], worker[i], worker[]);
+        on tile[1]: par (int i = 0; i < noOfThreads; i++) {
+            colWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
         }
     }
 
