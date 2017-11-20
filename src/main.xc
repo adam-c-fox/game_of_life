@@ -8,12 +8,13 @@
 #include "i2c.h"
 #include <assert.h>
 
-#define  IMHT 256                  //image height
-#define  IMWD 256                  //image width
-#define  noOfThreads 8
+#define  IMHT 64                  //image height
+#define  IMWD 64                  //image width
+#define  noOfThreads 4
 #define  iterations 1
 
 typedef unsigned char uchar;      //using uchar as shorthand
+typedef enum { false, true } bool; 
 
 on tile[0]: port p_scl = XS1_PORT_1E;         //interface ports to orientation
 on tile[0]: port p_sda = XS1_PORT_1F;
@@ -135,8 +136,10 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     }
   } 
 
+  bool iterating = true;
+
   //Iterate
-  for (int i = 0; i<iterations; i++) {
+  while (iterating) {
     //If even column: pass to right, then read from left
     //If odd column : read from left, then pass to right
     if ((id % 2) == 0) {
@@ -159,7 +162,15 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     } 
 
     iterate(grid);
+
+    dist_in <: 1;
+    dist_in :> iterating;
+
+
   }
+
+  int proceed;
+  dist_in :> proceed;
     
   //Send out
   for (int y = 0; y<IMHT; y++) {
@@ -206,11 +217,33 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
   printf("\nOne processing round completed...\n");
 
-  while (value != 13) {
-  	printf("Waiting for second Button Press\n");
-  	fromButtons :> value;
+  int closed = 0, confirm;
+  bool iterating = true;
+  printf("Waiting for second Button Press\n");
+
+
+  while (closed < noOfThreads) {
+  	select {
+  		case fromWorker[int i] :> confirm:
+  			if (iterating) fromWorker[i] <: true;
+  			else {
+  				printf("hello\n");
+  				fromWorker[i] <: false;
+  				closed++;
+  				printf("closed: %d\n", closed);
+  			}
+  			break;
+  		case fromButtons :> confirm:
+  			if (confirm == 13) iterating = false;
+  			break;	 
+  	}
   }
 
+
+  printf("argh\n");
+  for (int i = 0; i<noOfThreads; i++) {
+  	fromWorker[i] <: 1;
+  }
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
     for (int n = 0; n < noOfThreads; n++) {
@@ -325,7 +358,7 @@ int main(void) {
     par {
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
         on tile[0]: orientation(i2c[0],c_control);        //client thread reading orientation data
-        on tile[0]: DataInStream("256x256.pgm", c_inIO);          //thread to read in a PGM image
+        on tile[0]: DataInStream("64x64.pgm", c_inIO);          //thread to read in a PGM image
         on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
         on tile[0]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons);//thread to coordinate work on image
 
