@@ -307,10 +307,8 @@ int main(void) {
         DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
         distributor(c_inIO, c_outIO, c_control, dist);//thread to coordinate work on image
     
-        //TODO: Here we're passing the left channel to be worker[i], which is what we had before,
-        //but shouldn't it be i-1?
-        par (int i = 0; i < noOfThreads; i++) {
-            colWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+        par (int i = 0; i < noOfThreads; i++) {(i+1)%noOfThreads
+            colWorker(i, dist[i], worker[i], worker[]);
         }
     }
 
