@@ -8,17 +8,17 @@
 #include "i2c.h"
 #include <assert.h>
 
-on tile[0] : in port buttons = XS1_PORT_4E; //port to access xCore-200 buttons
-on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
-
 #define  IMHT 256                  //image height
 #define  IMWD 256                  //image width
-#define  noOfThreads 4
+#define  noOfThreads 8
+#define  iterations 1
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
 on tile[0]: port p_scl = XS1_PORT_1E;         //interface ports to orientation
 on tile[0]: port p_sda = XS1_PORT_1F;
+on tile[0] : in port buttons = XS1_PORT_4E; //port to access xCore-200 buttons
+on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 
 #define FXOS8700EQ_I2C_ADDR 0x1E  //register addresses for  orientation
 #define FXOS8700EQ_XYZ_DATA_CFG_REG 0x0E
@@ -37,10 +37,11 @@ on tile[0]: port p_sda = XS1_PORT_1F;
 void buttonListener(in port b, chanend toDistributor) {
   int r;
   while (1) {
-    b when pinseq(15)  :> r;    // check that no button is pressed
-    b when pinsneq(15) :> r;    // check if some buttons are pressed
-    if ((r==13) || (r==14))     // if either button is pressed
-    toDistributor <: r;             // send button pattern to userAnt
+    b when pinseq(15)  :> r;    
+    b when pinsneq(15) :> r;    
+    if ((r==13) || (r==14)) {
+    	toDistributor <: r;	
+    }  
   }
 }
 
@@ -134,10 +135,8 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     }
   } 
 
-  
-
   //Iterate
-  for (int i = 0; i<1; i++) {
+  for (int i = 0; i<iterations; i++) {
     //If even column: pass to right, then read from left
     //If odd column : read from left, then pass to right
     if ((id % 2) == 0) {
@@ -160,9 +159,6 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     } 
 
     iterate(grid);
-
-
-    //printf("i: %d\n", i);
   }
     
   //Send out
@@ -176,11 +172,17 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
 }
 
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads]) {
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons) {
   //Starting up and wait for  tilting of the xCore-200 Explorer
   printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
-  printf("Waiting for  Board Tilt...\n");
-  fromAcc :> int value;
+
+  int value = 0;
+
+  while (value != 14) {
+  	printf("Waiting for Button Press\n");
+  	fromButtons :> value;
+  }
+  
 
   //Read in and do something with your image values..
   //This just inverts every pixel, but you should
@@ -190,18 +192,24 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
   //uchar grid[IMHT][IMWD];
   uchar temp;
 
-  for (int y = 0; y < IMHT; y++) {   //go through all lines
-    for (int n = 0; n < noOfThreads; n++) {
-      for (int x = 0; x < (IMWD/noOfThreads); x++) { //go through each pixel per line
-        c_in :> temp;
-        fromWorker[n] <: temp;                    //read the pixel value
+	  for (int y = 0; y < IMHT; y++) {   //go through all lines
+	    for (int n = 0; n < noOfThreads; n++) {
+	      for (int x = 0; x < (IMWD/noOfThreads); x++) { //go through each pixel per line
+	        c_in :> temp;
+	        fromWorker[n] <: temp;                    //read the pixel value
 
-        //c_out <: (uchar)(val ^ 0xFF); //send some modified pixel out
-      }
-    }
-  }
+	        //c_out <: (uchar)(val ^ 0xFF); //send some modified pixel out
+	      }
+	    }
+	  }
+
+
   printf("\nOne processing round completed...\n");
 
+  while (value != 13) {
+  	printf("Waiting for second Button Press\n");
+  	fromButtons :> value;
+  }
 
 
   for (int y = 0; y < IMHT; y++) {   //go through all lines
@@ -307,7 +315,9 @@ void test() {
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(void) {
     i2c_master_if i2c[1];               //interface to orientation
-    chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
+    chan c_inIO, c_outIO, c_control;
+    chan c_buttons;
+
     
     //colWorker channels
     chan worker[noOfThreads], dist[noOfThreads];
@@ -317,7 +327,10 @@ int main(void) {
         on tile[0]: orientation(i2c[0],c_control);        //client thread reading orientation data
         on tile[0]: DataInStream("256x256.pgm", c_inIO);          //thread to read in a PGM image
         on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
-        on tile[0]: distributor(c_inIO, c_outIO, c_control, dist);//thread to coordinate work on image
+        on tile[0]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons);//thread to coordinate work on image
+
+        on tile[0]: buttonListener(buttons, c_buttons);
+
     
         on tile[1]: par (int i = 0; i < noOfThreads; i++) {
             colWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
