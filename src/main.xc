@@ -10,7 +10,8 @@
 
 #define  IMHT 64                  //image height
 #define  IMWD 64                  //image width
-#define  noOfThreads 4
+#define  noOfThreads 4 //Our implementation requires that this must be even
+//TODO adam ^ please check that statement
 #define  iterations 1
 
 typedef unsigned char uchar;      //using uchar as shorthand
@@ -64,6 +65,7 @@ void buttonListener(in port b, chanend toDistributor) {
 // Read Image from PGM file from path infname[] to channel c_out
 //
 /////////////////////////////////////////////////////////////////////////////////////////
+
 void DataInStream(char infname[], chanend c_out) {
   int res;
   uchar line[IMWD];
@@ -94,12 +96,11 @@ void DataInStream(char infname[], chanend c_out) {
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
-// Start your implementation by changing this function to implement the game of life
-// by farming out parts of the image to worker threads who implement it...
-// Currently the function just inverts the image
+// Worker functions. 
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
+//Total number of neighbors of a cell
 uchar sumNeighbors(uchar pre[IMHT][(IMWD/noOfThreads)+2], int x, int y) {
     int total = 0;
 
@@ -113,6 +114,7 @@ uchar sumNeighbors(uchar pre[IMHT][(IMWD/noOfThreads)+2], int x, int y) {
     return total;
 }
 
+//Iterate an array section
 void iterate(uchar array[IMHT][(IMWD/noOfThreads)+2]) {
     const int ix = IMWD/noOfThreads;
     uchar pre[IMHT][(IMWD/noOfThreads)+2];
@@ -138,62 +140,73 @@ void iterate(uchar array[IMHT][(IMWD/noOfThreads)+2]) {
     //0   = BLACK
 }
 
-void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
-  int colwidth = (IMWD/noOfThreads);
-  uchar grid[IMHT][(IMWD/noOfThreads)+2];
-
-  //Read in corresponding segment of world
-  for (int y = 0; y<IMHT; y++) {
-    for (int x = 1; x <= colwidth; x++){
-      dist_in :> grid[y][x];
+//Send out corresponding segment of world
+void sendOut(chanend dist_in, uchar grid[IMHT][IMWD/noOfThreads+2]) {
+    int colWidth = (IMWD/noOfThreads);
+    for (int y = 0; y<IMHT; y++) {
+        for (int x = 1; x <= colWidth; x++){
+            dist_in <: grid[y][x];
+        }
     }
-  } 
-
-  bool iterating = true;
-
-  //Iterate
-  while (iterating) {
-    //If even column: pass to right, then read from left
-    //If odd column : read from left, then pass to right
-    if ((id % 2) == 0) {
-      for (int y = 0; y<IMHT; y++) {
-        c_right <: grid[y][colwidth];
-        c_left  :> grid[y][0];
-
-        c_right :> grid[y][colwidth+1];
-        c_left  <: grid[y][1];
-      }
-    }
-    else {
-      for (int y = 0; y<IMHT; y++) {
-        c_left :> grid[y][0];
-        c_right <: grid[y][colwidth];
-
-        c_left  <: grid[y][1];
-        c_right :> grid[y][colwidth+1];
-      }
-    } 
-
-    iterate(grid);
-
-    dist_in <: 1;
-    dist_in :> iterating;
-
-
-  }
-
-  int proceed;
-  dist_in :> proceed;
-    
-  //Send out
-  for (int y = 0; y<IMHT; y++) {
-    for (int x = 1; x <= colwidth; x++){
-      //printf("hello: %d\n", id);
-      dist_in <: grid[y][x];
-
-    }
-  }  
 }
+
+//Read in corresponding segment of world
+void readIn(chanend dist_in, uchar grid[IMHT][IMWD/noOfThreads+2]) {
+    int colWidth = (IMWD/noOfThreads);
+    for (int y = 0; y<IMHT; y++) {
+        for (int x = 1; x <= colWidth; x++){
+            dist_in :> grid[y][x];
+        }
+    }
+}
+
+
+void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
+    int colWidth = (IMWD/noOfThreads); //Adam remember to remove if needed
+    uchar grid[IMHT][(IMWD/noOfThreads)+2];
+
+    readIn(dist_in, grid);
+
+    bool iterating = true;
+    while (iterating) {
+        //If even column: pass to right, then read from left
+        //If odd column : read from left, then pass to right
+        if ((id % 2) == 0) {
+            for (int y = 0; y<IMHT; y++) {
+                c_right <: grid[y][colWidth];
+                c_left  :> grid[y][0];
+
+                c_right :> grid[y][colWidth+1];
+                c_left  <: grid[y][1];
+            }
+        }
+        else {
+            for (int y = 0; y<IMHT; y++) {
+                c_left :> grid[y][0];
+                c_right <: grid[y][colWidth];
+
+                c_left  <: grid[y][1];
+                c_right :> grid[y][colWidth+1];
+            }
+        } 
+
+        iterate(grid);
+
+        dist_in <: 1;
+        dist_in :> iterating;
+    }
+
+    int proceed;
+    dist_in :> proceed;
+
+    readIn(dist_in, grid); 
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+// Distributor functions. 
+//
+/////////////////////////////////////////////////////////////////////////////////////////
 
 
 //Reads in image and passes to the correct worker
@@ -212,8 +225,26 @@ void passInitialState(chanend c_in, chanend fromWorker[noOfThreads]) {
     printf("Image read in successfully.\n");
 }
 
+//Collects in results from workers and sends to output
+void passOutputState(chanend c_out, chanend fromWorker[noOfThreads]) {
+    printf("Button press confirmed, saving image...\n");
+
+    for (int i = 0; i<noOfThreads; i++) {
+    	fromWorker[i] <: 1;
+    }
+    
+    uchar temp;
+    for (int y = 0; y < IMHT; y++) {   
+        for (int n = 0; n < noOfThreads; n++) {
+            for (int x = 0; x < (IMWD/noOfThreads); x++) { 
+                fromWorker[n] :> temp;                    
+                c_out <: temp;
+            }
+        }
+    }
+}
+
 void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons, chanend toLEDs) {
-    //Starting up and wait for  tilting of the xCore-200 Explorer
     printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
 
     int value = 0;
@@ -225,7 +256,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     }
     
     toLEDs <: 1;
-
 
     passInitialState(c_in, fromWorker); 
 
@@ -258,24 +288,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     }
 
     toLEDs <: 0;
-    printf("Button press confirmed, saving image...\n");
-
-    for (int i = 0; i<noOfThreads; i++) {
-    	fromWorker[i] <: 1;
-    }
-    
-    uchar temp;
-    for (int y = 0; y < IMHT; y++) {   //go through all lines
-      for (int n = 0; n < noOfThreads; n++) {
-        for (int x = 0; x < (IMWD/noOfThreads); x++) { //go through each pixel per line
-          fromWorker[n] :> temp;                    //read the pixel value
-
-          c_out <: temp;
-        }
-      }
-    }
-
-
+    passOutputState(c_out, fromWorker);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -283,6 +296,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 // Write pixel stream from channel c_in to PGM image file
 //
 /////////////////////////////////////////////////////////////////////////////////////////
+
 void DataOutStream(char outfname[], chanend c_in) {
   int res;
   uchar line[IMWD];
@@ -315,6 +329,7 @@ void DataOutStream(char outfname[], chanend c_in) {
 // Initialise and  read orientation, send first tilt event to channel
 //
 /////////////////////////////////////////////////////////////////////////////////////////
+
 void orientation(client interface i2c_master_if i2c, chanend toDist) {
   i2c_regop_res_t result;
   char status_data = 0;
