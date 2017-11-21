@@ -196,86 +196,84 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
 }
 
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons, chanend toLEDs) {
-  //Starting up and wait for  tilting of the xCore-200 Explorer
-  printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
+//Reads in image and passes to the correct worker
+void passInitialState(chanend c_in, chanend fromWorker[noOfThreads]) {
+    printf("Reading in image...\n");
 
-  int value = 0;
-
-  while (value != 14) {
-  	//printf("Waiting for Button Press...\n");
-  	printf("Confirm launch...\n");
-  	fromButtons :> value;
-  }
-  
-  toLEDs <: 1;
-
-  //Read in and do something with your image values..
-  //This just inverts every pixel, but you should
-  //change the image according to the "Game of Life"
-  printf("Reading in image...\n");
-
-  //uchar grid[IMHT][IMWD];
-  uchar temp;
-
-	  for (int y = 0; y < IMHT; y++) {   //go through all lines
-	    for (int n = 0; n < noOfThreads; n++) {
-	      for (int x = 0; x < (IMWD/noOfThreads); x++) { //go through each pixel per line
+    uchar temp;
+    for (int y = 0; y < IMHT; y++) {  
+        for (int n = 0; n < noOfThreads; n++) {
+            for (int x = 0; x < (IMWD/noOfThreads); x++) { 
 	        c_in :> temp;
-	        fromWorker[n] <: temp;                    //read the pixel value
+                fromWorker[n] <: temp;                    
+            }
+        }
+    }
+    printf("Image read in successfully.\n");
+}
 
-	        //c_out <: (uchar)(val ^ 0xFF); //send some modified pixel out
-	      }
-	    }
-	  }
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons, chanend toLEDs) {
+    //Starting up and wait for  tilting of the xCore-200 Explorer
+    printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
+
+    int value = 0;
+
+    while (value != 14) {
+        //printf("Waiting for Button Press...\n");
+    	printf("Confirm launch...\n");
+    	fromButtons :> value;
+    }
+    
+    toLEDs <: 1;
 
 
-  printf("Image read in successfully.\n");
+    passInitialState(c_in, fromWorker); 
 
-  int closed = 0, confirm;
-  bool iterating = true;
-  printf("Waiting for second button press...\n");
+    int closed = 0, confirm;
+    bool iterating = true;
+    printf("Waiting for second button press...\n");
 
-  int ledPattern = 5;
+    int ledPattern = 5;
 
-  while (closed < noOfThreads) {
-  	select {
-  		case fromWorker[int i] :> confirm:
-  			if (iterating) fromWorker[i] <: true;
-  			else {
-  				fromWorker[i] <: false;
-  				closed++;
-  			}
+    while (closed < noOfThreads) {
+    	select {
+    		case fromWorker[int i] :> confirm:
+    			if (iterating) fromWorker[i] <: true;
+    			else {
+    				fromWorker[i] <: false;
+    				closed++;
+    			}
 
-  			if (i == 0) {
-  				toLEDs <: ledPattern;
+    			if (i == 0) {
+    				toLEDs <: ledPattern;
 
-  				if (ledPattern == 5) ledPattern = 1;
-  				else ledPattern = 5;
-  			}
-  			break;
-  		case fromButtons :> confirm:
-  			if (confirm == 13) iterating = false;
-  			break;	 
-  	}
-  }
+    				if (ledPattern == 5) ledPattern = 1;
+    				else ledPattern = 5;
+    			}
+    			break;
+    		case fromButtons :> confirm:
+    			if (confirm == 13) iterating = false;
+    			break;	 
+    	}
+    }
 
-  toLEDs <: 0;
-  printf("Button press confirmed, saving image...\n");
+    toLEDs <: 0;
+    printf("Button press confirmed, saving image...\n");
 
-  for (int i = 0; i<noOfThreads; i++) {
-  	fromWorker[i] <: 1;
-  }
+    for (int i = 0; i<noOfThreads; i++) {
+    	fromWorker[i] <: 1;
+    }
+    
+    uchar temp;
+    for (int y = 0; y < IMHT; y++) {   //go through all lines
+      for (int n = 0; n < noOfThreads; n++) {
+        for (int x = 0; x < (IMWD/noOfThreads); x++) { //go through each pixel per line
+          fromWorker[n] :> temp;                    //read the pixel value
 
-  for (int y = 0; y < IMHT; y++) {   //go through all lines
-    for (int n = 0; n < noOfThreads; n++) {
-      for (int x = 0; x < (IMWD/noOfThreads); x++) { //go through each pixel per line
-        fromWorker[n] :> temp;                    //read the pixel value
-
-        c_out <: temp;
+          c_out <: temp;
+        }
       }
     }
-  }
 
 
 }
