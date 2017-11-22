@@ -8,10 +8,9 @@
 #include "i2c.h"
 #include <assert.h>
 
-#define  IMHT 64                  //image height
-#define  IMWD 64                  //image width
-#define  noOfThreads 4 //Our implementation requires that this must be even
-//TODO adam ^ please check that statement
+#define  IMHT 512                  //image height
+#define  IMWD 512                  //image width
+#define  noOfThreads 8 			  //Our implementation requires that this must be 2^n
 #define  iterations 1
 
 typedef unsigned char uchar;      //using uchar as shorthand
@@ -69,7 +68,7 @@ void buttonListener(in port b, chanend toDistributor) {
 void DataInStream(char infname[], chanend c_out) {
   int res;
   uchar line[IMWD];
-  printf("DataInStream: Start...\n");
+  //printf("DataInStream: Start...\n");
 
   //Open PGM file
   res = _openinpgm(infname, IMWD, IMHT);
@@ -90,7 +89,7 @@ void DataInStream(char infname[], chanend c_out) {
 
   //Close PGM image file
   _closeinpgm();
-  printf("DataInStream: Done...\n");
+  //printf("DataInStream: Done...\n");
   return;
 }
 
@@ -116,7 +115,7 @@ uchar sumNeighbors(uchar pre[IMHT][(IMWD/noOfThreads)+2], int x, int y) {
 
 //Iterate an array section
 void iterate(uchar array[IMHT][(IMWD/noOfThreads)+2]) {
-    const int ix = IMWD/noOfThreads;
+    int ix = IMWD/noOfThreads;
     uchar pre[IMHT][(IMWD/noOfThreads)+2];
 
     for (int y = 0; y < IMHT; y++) {
@@ -199,7 +198,7 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     int proceed;
     dist_in :> proceed;
 
-    readIn(dist_in, grid); 
+    sendOut(dist_in, grid); 
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -218,7 +217,7 @@ void passInitialState(chanend c_in, chanend fromWorker[noOfThreads]) {
         for (int n = 0; n < noOfThreads; n++) {
             for (int x = 0; x < (IMWD/noOfThreads); x++) { 
 	        c_in :> temp;
-                fromWorker[n] <: temp;                    
+            fromWorker[n] <: temp;                    
             }
         }
     }
@@ -232,16 +231,18 @@ void passOutputState(chanend c_out, chanend fromWorker[noOfThreads]) {
     for (int i = 0; i<noOfThreads; i++) {
     	fromWorker[i] <: 1;
     }
-    
+
     uchar temp;
-    for (int y = 0; y < IMHT; y++) {   
+    for (int y = 0; y < IMHT; y++) {
         for (int n = 0; n < noOfThreads; n++) {
             for (int x = 0; x < (IMWD/noOfThreads); x++) { 
                 fromWorker[n] :> temp;                    
+
                 c_out <: temp;
             }
         }
     }
+
 }
 
 void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons, chanend toLEDs) {
@@ -251,7 +252,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     while (value != 14) {
         //printf("Waiting for Button Press...\n");
-    	printf("Confirm launch...\n");
+    	printf("Proceed with launch?\n");
     	fromButtons :> value;
     }
     
@@ -261,7 +262,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     int closed = 0, confirm;
     bool iterating = true;
-    printf("Waiting for second button press...\n");
+    printf("Terminate at will...\n");
 
     int ledPattern = 5;
 
@@ -302,7 +303,7 @@ void DataOutStream(char outfname[], chanend c_in) {
   uchar line[IMWD];
 
   //Open PGM file
-  printf("DataOutStream: Start...\n");
+  //printf("DataOutStream: Start...\n");
   res = _openoutpgm(outfname, IMWD, IMHT);
   if (res) {
     printf("DataOutStream: Error opening %s\n.", outfname);
@@ -393,15 +394,18 @@ int main(void) {
     par {
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
         on tile[0]: orientation(i2c[0],c_control);        //client thread reading orientation data
-        on tile[0]: DataInStream("64x64.pgm", c_inIO);          //thread to read in a PGM image
-        on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
-        on tile[0]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);//thread to coordinate work on image
+        on tile[1]: DataInStream("512x512.pgm", c_inIO);          //thread to read in a PGM image
+        on tile[1]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
+        on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);//thread to coordinate work on image
 
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
-
     
-        on tile[1]: par (int i = 0; i < noOfThreads; i++) {
+        on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
+            colWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+        }
+
+        on tile[1]: par (int i = 4; i < noOfThreads; i++) {
             colWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
         }
     }
