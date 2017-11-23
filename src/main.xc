@@ -96,9 +96,92 @@ void DataInStream(char infname[], chanend c_out) {
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
+// Packed worker functions. 
+//
+/////////////////////////////////////////////////////////////////////////////////////////
+
+uchar pack(uchar cells[8]) {
+    uchar result = 0;
+    for (int i = 0; i < 8; i++) {
+        result | cells[i] << i;
+    }
+    return result;
+}
+
+void unpack(uchar cells[8], uchar x) {
+    for (int i = 0; i < 8; i++) {
+        cells[i] = (x >> i) & 1;
+    }
+}
+
+uchar extract(int n, uchar x) {
+    return (x >> n) & 1;
+}
+
+int sumGroup(int x_min, int x_max, uchar row[3]) {
+    int sum;
+    for (int j = 0; j < 3; j++) {
+        for (int i = x_min; i < x_max; i++) {
+            if (i != 1) sum += extract(i + x, row[j]);
+        } 
+    }
+    return sum;
+}
+
+uchar sumNeighborsPrime(int x, int y, uchar lCol, uchar rCol, uchar row[3]) {
+    int sum = 0;
+    if (x == 1) {
+        sum += sumGroup(1, 3, row);
+        for (int i = 0; i < 3; i++) {
+            sum += extract(y + j, lCol);
+        }
+    }
+    
+    else if (x == 6) {
+        sum += sumGroup(0, 2, row);
+        for (int i = 0; i < 3; i++) {
+            sum += extract(y + j, rCol);
+        }
+    }
+
+    else {
+        sum = sumGroup(0, 3, row);
+    }
+    return sum;
+}
+
+//Iterate an array section
+void iterate(uchar array[IMHT][(IMWD/noOfThreads)+2]) {
+    const int ix = IMWD/noOfThreads;
+    uchar pre[IMHT][(IMWD/noOfThreads)+2];
+
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 0; x < (ix+2); x++) {
+            pre[y][x] = array[y][x];
+        }
+    }
+    
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 1; x <= ix; x++) {
+            uchar n = sumNeighbors(pre, x, y);
+
+            if (n < 2) array[y][x] = 0;
+            //if (n == 2 || n == 3) // do nothing
+            if (n > 3) array[y][x] = 0;
+            if (n == 3) array[y][x] = 255;
+        }
+    }
+
+    //255 = WHITE
+    //0   = BLACK
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
 // Worker functions. 
 //
 /////////////////////////////////////////////////////////////////////////////////////////
+
 
 //Total number of neighbors of a cell
 uchar sumNeighbors(uchar pre[IMHT][(IMWD/noOfThreads)+2], int x, int y) {
