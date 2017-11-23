@@ -254,33 +254,40 @@ void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     
 }
 
+void passLeftFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
+    int last = (IMWD/8) - 1;
+    for (int y = 0; y < IMHT/8; y++) {
+        c_right <: getRow(7, grid[y][last]);
+        c_left  :> grid[y][0].left;
+
+        c_right :> grid[y][last].right;
+        c_left  <: getRow(0, grid[y][0]);
+    }
+}
+
+void passRightFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
+    int last = (IMWD/8) - 1;
+    for (int y = 0; y < IMHT/8; y++) {
+        c_right <: getRow(7, grid[y][last]);
+        c_left  :> grid[y][0].left;
+
+        c_right :> grid[y][last].right;
+        c_left  <: getRow(0, grid[y][0]);
+    }
+}
+
 void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
     pChunk grid[IMHT/8][(IMWD/noOfThreads)/8];
     readInPacked(dist_in, grid);
     linkChunks(grid);
-    int last = (IMWD/8) - 1;
 
     bool iterating = true;
     while (iterating) {
-        //If even column: pass to right, then read from left
-        //If odd column : read from left, then pass to right
         if ((id % 2) == 0) {
-            for (int y = 0; y < IMHT/8; y++) {
-                c_right <: getRow(7, grid[y][last]);
-                c_left  :> grid[y][0].left;
-
-                c_right :> grid[y][last].right;
-                c_left  <: getRow(0, grid[y][0]);
-            }
+            passLeftFirst(grid, c_left, c_right);
         }
         else {
-            for (int y = 0; y < IMHT/8; y++) {
-                c_left  :> grid[y][0].left;
-                c_right <: getRow(7, grid[y][last]);
-
-                c_left  <: getRow(0, grid[y][0]);
-                c_right :> grid[y][last].right;
-            }
+            passRightFirst(grid, c_left, c_right);
         } 
 
         iteratePacked(grid);
