@@ -248,37 +248,38 @@ void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     }
 
     for (int x = 1; x < (IMWD/noOfThreads)/8; x++) {
-        grid[IMHT/8][x].top = grid[0][x].row[0];
-        grid[0][x].bottom = grid[IMHT/8][x].row[7];
+        grid[IMHT/8 - 1][x].top = grid[0][x].row[0];
+        grid[0][x].bottom = grid[IMHT/8 - 1][x].row[7];
     }
     
 }
 
 void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
-    pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]
+    pChunk grid[IMHT/8][(IMWD/noOfThreads)/8];
     readInPacked(dist_in, grid);
     linkChunks(grid);
+    int last = (IMWD/8) - 1;
 
     bool iterating = true;
     while (iterating) {
         //If even column: pass to right, then read from left
         //If odd column : read from left, then pass to right
         if ((id % 2) == 0) {
-            for (int y = 0; y<IMHT; y++) {
-                c_right <: grid[y][colWidth];
-                c_left  :> grid[y][0];
+            for (int y = 0; y < IMHT/8; y++) {
+                c_right <: getRow(7, grid[y][last]);
+                c_left  :> grid[y][0].left;
 
-                c_right :> grid[y][colWidth+1];
-                c_left  <: grid[y][1];
+                c_right :> grid[y][last].right;
+                c_left  <: getRow(0, grid[y][0]);
             }
         }
         else {
-            for (int y = 0; y<IMHT; y++) {
-                c_left :> grid[y][0];
-                c_right <: grid[y][colWidth];
+            for (int y = 0; y < IMHT/8; y++) {
+                c_left  :> grid[y][0].left;
+                c_right <: getRow(7, grid[y][last]);
 
-                c_left  <: grid[y][1];
-                c_right :> grid[y][colWidth+1];
+                c_left  <: getRow(0, grid[y][0]);
+                c_right :> grid[y][last].right;
             }
         } 
 
