@@ -8,10 +8,9 @@
 #include "i2c.h"
 #include <assert.h>
 
-#define  IMHT 512                  //image height
-#define  IMWD 512                  //image width
-#define  noOfThreads 8 			  //Our implementation requires that this must be 2^n
-#define  iterations 1
+#define  IMHT 16                  //image height
+#define  IMWD 16                  //image width
+#define  noOfThreads 2			  //Our implementation requires that this must be 2^n
 
 typedef unsigned char uchar;      //using uchar as shorthand
 typedef enum { false, true } bool; 
@@ -108,7 +107,7 @@ typedef struct packedChunk pChunk;
 uchar pack(uchar cells[8]) {
     uchar result = 0;
     for (int i = 0; i < 8; i++) {
-        result | (cells[i] & 1) << i;
+        result = result | (cells[i] & 1) << i;
     }
     return result;
 }
@@ -120,36 +119,59 @@ void unpack(uchar x, uchar cells[8]) {
 }
 
 uchar extract(int n, uchar x) {
-    return (x >> n) & 1;
+    return (x >> (7-n)) & 1;
 }
 
-int sumGroup(int x, int y, int x_min, int x_max, pChunk c) {
-    int sum;
-    for (int j = 0; j < 3; j++) {
-        for (int i = x_min; i < x_max; i++) {
-            if (i != 1) sum += extract(i + x, c.row[j + y]);
+int sumGroup(int x, int y, int x_min, int x_max, int y_min, int y_max, pChunk c) {
+    int sum = 0;
+    for (int j = y_min; j < y_max; j++) {
+        for (int i = x_min; i < x_max; i++) {        	
+        	//printf("sum: %d\n", sum);
+            if ((i != 1) && (j != 1)) sum += extract(i + x - 1, c.row[j + y - 1]);
         } 
     }
+    //printf("sum: %d\n", sum);
     return sum;
 }
 
 uchar sumNeighborsPacked(int x, int y, pChunk c) {
     int sum = 0;
+    int bottom = 0, left = 0, top = 3, right = 3;
+
+
     if (x == 0) {
-        sum += sumGroup(x, y, 1, 3, c);
         for (int j = 0; j < 3; j++) {
             sum += extract(y + j, c.left);
         }
+
+        left = 1;
     }
-    else if (x == 7) {
-        sum += sumGroup(x, y, 0, 2, c);
+    if (x == 7) {
         for (int j = 0; j < 3; j++) {
             sum += extract(y + j, c.right);
         }
+
+        right = 2;
     }
-    else {
-        sum = sumGroup(x, y, 0, 3, c);
+    if (y == 0) {
+		for (int i = 0; i < 3; i++) {
+            sum += extract(x + i, c.bottom);
+        }
+
+        bottom = 1;    	
     }
+    if (y == 7) {
+		for (int i = 0; i < 3; i++) {
+            sum += extract(x + i, c.top);
+        }
+
+        top = 1;    	
+    }
+
+    //printf("x: %d | y: %d\n", x, y);
+    //printf("sum: %d\n", sum);
+    sum += sumGroup(x, y, left, right, bottom, top, c);
+
     return sum;
 }
 
@@ -157,7 +179,7 @@ pChunk copyPChunk(pChunk c) {
     pChunk pre;
 
     for (int i = 0; i < 8; i++) {
-       c.row[i] = pre.row[i]; 
+       pre.row[i] = c.row[i];
     }
 
     c.left = pre.left;
@@ -171,21 +193,35 @@ pChunk copyPChunk(pChunk c) {
 //TODO change struct passing to pass by reference
 pChunk iteratePChunk(pChunk c) {
     pChunk pre = copyPChunk(c);
+
+    for (int i = 0; i<8; i++) {
+    	printf("%d | %d\n", c.row[i], pre.row[i]);
+    }
+
+    int count = 0;
     
     for (int y = 0; y < 8; y++) {
         uchar result = 0;
         for (int x = 0; x < 8; x++) { 
             uchar n = sumNeighborsPacked(x, y, pre);
+            
+            if (n>0) count++;
+
+            //printf("n: %d\n", n);
             uchar new = 0;
 
             if (n < 2) new = 0;
             if (n == 2 || n == 3)  new = extract(x, pre.row[y]); // think carefully about this
             if (n > 3) new = 0;
             if (n == 3) new = 1;
-            result | new << x;
+
+            //if (new != 0) printf("new: %d\n", new);
+            result = result | new << x;
         }
         c.row[y] = result;
+        //printf("c.row[y]: %d\n", c.row[y]);
     }
+    //printf("count: %d\n", count);
     return c;
 }
 
@@ -201,12 +237,17 @@ void iteratePacked(pChunk array[IMHT/8][(IMWD/noOfThreads)/8]) {
 
 //Read in corresponding segment of world
 void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
+	uchar temp;
+
     for (int y = 0; y < IMHT/8; y++) {
         for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
             for (int j = 0; j < 8; j++) {
                 uchar buffer[8];
                 for (int i = 0; i < 8; i++) {
-                    dist :> buffer[i];
+                    dist :> temp;
+
+                    if (temp == 255) buffer[i] = 1; //May not be needed
+                    else buffer[i] = 0;
                 }
                 grid[y][x].row[j] = pack(buffer);
             }
@@ -222,7 +263,7 @@ void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
                 uchar buffer[8];
                 unpack(grid[y][x].row[j], buffer); 
                 for (int i = 0; i < 8; i++) {
-                    dist <: buffer[i];
+                    dist <: (uchar)(buffer[i] * 255);
                 }
             }
         }
@@ -254,46 +295,61 @@ void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     
 }
 
-void passLeftFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
-    int last = (IMWD/8) - 1;
+void passFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
+    int last = (IMWD/noOfThreads)/8 - 1;
     for (int y = 0; y < IMHT/8; y++) {
-        c_right <: getRow(7, grid[y][last]);
-        c_left  :> grid[y][0].left;
-
-        c_right :> grid[y][last].right;
         c_left  <: getRow(0, grid[y][0]);
+		c_right :> grid[y][last].right;        
+
+        c_right <: getRow(7, grid[y][last]);
+        c_left  :> grid[y][0].left;        
     }
 }
 
-void passRightFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
-    int last = (IMWD/8) - 1;
+void receiveFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
+    int last = (IMWD/noOfThreads)/8 - 1;
     for (int y = 0; y < IMHT/8; y++) {
-        c_right <: getRow(7, grid[y][last]);
-        c_left  :> grid[y][0].left;
-
-        c_right :> grid[y][last].right;
+    	c_right :> grid[y][last].right;
         c_left  <: getRow(0, grid[y][0]);
+
+        c_left  :> grid[y][0].left;
+        c_right <: getRow(7, grid[y][last]);
     }
 }
 
 void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
     pChunk grid[IMHT/8][(IMWD/noOfThreads)/8];
-    readInPacked(dist_in, grid);
-    linkChunks(grid);
+    readInPacked(dist_in, grid);    
+
+
+    
+    // for (int i = 0; i<8; i++) {
+    // 	printf("%d: row: %d\n", i, grid[0][0].row[i]);	
+    // }  
 
     bool iterating = true;
     while (iterating) {
+    	linkChunks(grid);
+
+    	printf("here_top\n");
+
         if ((id % 2) == 0) {
-            passLeftFirst(grid, c_left, c_right);
+            passFirst(grid, c_left, c_right);
+        	printf("left\n");
         }
         else {
-            passRightFirst(grid, c_left, c_right);
+            receiveFirst(grid, c_left, c_right);
+        	printf("right\n");
         } 
 
         iteratePacked(grid);
 
+        uchar test = extract(4, grid[0][0].row[7]);  
+    	printf("test_colWorkerPacked: %d\n", test);
+
         dist_in <: 1;
         dist_in :> iterating;
+
     }
 
     int proceed;
@@ -604,20 +660,23 @@ int main(void) {
     par {
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
         on tile[0]: orientation(i2c[0],c_control);        //client thread reading orientation data
-        on tile[1]: DataInStream("512x512.pgm", c_inIO);          //thread to read in a PGM image
+        on tile[1]: DataInStream("test.pgm", c_inIO);          //thread to read in a PGM image
         on tile[1]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
         on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);//thread to coordinate work on image
 
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
     
-        on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
-            colWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
-        }
+        // on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
+        //     colWorkerPacked(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+        // }
 
-        on tile[1]: par (int i = 4; i < noOfThreads; i++) {
-            colWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
-        }
+        // on tile[1]: par (int i = 4; i < noOfThreads; i++) {
+        //     colWorkerPacked(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+        // }
+
+        on tile[1]: colWorkerPacked(0, dist[0], worker[0], worker[1]);
+        on tile[1]: colWorkerPacked(1, dist[1], worker[1], worker[0]);
     }
 
     return 0;
