@@ -99,15 +99,21 @@ void DataInStream(char infname[], chanend c_out) {
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
+struct packedChunk {
+    uchar left, right, top, bottom;
+    uchar row[8];
+};
+typedef struct packedChunk pChunk;
+
 uchar pack(uchar cells[8]) {
     uchar result = 0;
     for (int i = 0; i < 8; i++) {
-        result | cells[i] << i;
+        result | (cells[i] & 1) << i;
     }
     return result;
 }
 
-void unpack(uchar cells[8], uchar x) {
+void unpack(uchar x, uchar cells[8]) {
     for (int i = 0; i < 8; i++) {
         cells[i] = (x >> i) & 1;
     }
@@ -117,62 +123,175 @@ uchar extract(int n, uchar x) {
     return (x >> n) & 1;
 }
 
-int sumGroup(int x_min, int x_max, uchar row[3]) {
+int sumGroup(int x, int y, int x_min, int x_max, pChunk c) {
     int sum;
     for (int j = 0; j < 3; j++) {
         for (int i = x_min; i < x_max; i++) {
-            if (i != 1) sum += extract(i + x, row[j]);
+            if (i != 1) sum += extract(i + x, c.row[j + y]);
         } 
     }
     return sum;
 }
 
-uchar sumNeighborsPrime(int x, int y, uchar lCol, uchar rCol, uchar row[3]) {
+uchar sumNeighborsPacked(int x, int y, pChunk c) {
     int sum = 0;
-    if (x == 1) {
-        sum += sumGroup(1, 3, row);
-        for (int i = 0; i < 3; i++) {
-            sum += extract(y + j, lCol);
+    if (x == 0) {
+        sum += sumGroup(x, y, 1, 3, c);
+        for (int j = 0; j < 3; j++) {
+            sum += extract(y + j, c.left);
         }
     }
-    
-    else if (x == 6) {
-        sum += sumGroup(0, 2, row);
-        for (int i = 0; i < 3; i++) {
-            sum += extract(y + j, rCol);
+    else if (x == 7) {
+        sum += sumGroup(x, y, 0, 2, c);
+        for (int j = 0; j < 3; j++) {
+            sum += extract(y + j, c.right);
         }
     }
-
     else {
-        sum = sumGroup(0, 3, row);
+        sum = sumGroup(x, y, 0, 3, c);
     }
     return sum;
 }
 
-//Iterate an array section
-void iterate(uchar array[IMHT][(IMWD/noOfThreads)+2]) {
-    const int ix = IMWD/noOfThreads;
-    uchar pre[IMHT][(IMWD/noOfThreads)+2];
+pChunk copyPChunk(pChunk c) {
+    pChunk pre;
 
-    for (int y = 0; y < IMHT; y++) {
-        for (int x = 0; x < (ix+2); x++) {
-            pre[y][x] = array[y][x];
+    for (int i = 0; i < 8; i++) {
+       c.row[i] = pre.row[i]; 
+    }
+
+    c.left = pre.left;
+    c.right = pre.right;
+    c.top = pre.top;
+    c.bottom = pre.bottom;
+
+    return pre;
+}
+
+//TODO change struct passing to pass by reference
+pChunk iteratePChunk(pChunk c) {
+    pChunk pre = copyPChunk(c);
+    
+    for (int y = 0; y < 8; y++) {
+        uchar result = 0;
+        for (int x = 0; x < 8; x++) { 
+            uchar n = sumNeighborsPacked(x, y, pre);
+            uchar new = 0;
+
+            if (n < 2) new = 0;
+            if (n == 2 || n == 3)  new = extract(x, pre.row[y]); // think carefully about this
+            if (n > 3) new = 0;
+            if (n == 3) new = 1;
+            result | new << x;
         }
+        c.row[y] = result;
+    }
+    return c;
+}
+
+
+//Iterate an array section
+void iteratePacked(pChunk array[IMHT/8][(IMWD/noOfThreads)/8]) {
+    for (int y = 0; y < IMHT/8; y++) {
+        for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
+            array[y][x] = iteratePChunk(array[y][x]);    
+        } 
+    }
+}
+
+//Read in corresponding segment of world
+void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
+    for (int y = 0; y < IMHT/8; y++) {
+        for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
+            for (int j = 0; j < 8; j++) {
+                uchar buffer[8];
+                for (int i = 0; i < 8; i++) {
+                    dist :> buffer[i];
+                }
+                grid[y][x].row[j] = pack(buffer);
+            }
+        }
+    }
+}
+
+//Send out corresponding segment of world
+void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
+    for (int y = 0; y < IMHT/8; y++) {
+        for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
+            for (int j = 0; j < 8; j++) {
+                uchar buffer[8];
+                unpack(grid[y][x].row[j], buffer); 
+                for (int i = 0; i < 8; i++) {
+                    dist <: buffer[i];
+                }
+            }
+        }
+    }
+}
+
+uchar getRow(int n, pChunk c) {
+    uchar result = 0;
+    for (int i = 0; i < 8; i++) {
+        result | (c.row[i] & 1) << i;
+    }
+    return result;
+}
+
+void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
+    for (int y = 1; y < IMHT/8 - 1; y++) {
+        for (int x = 1; x < (IMWD/noOfThreads)/8 - 1; x++) {
+            grid[y][x].left = getRow(7, grid[y][x]);
+            grid[y][x].right = getRow(0, grid[y][x]);
+            grid[y][x].bottom = grid[y - 1][x].row[7];
+            grid[y][x].top = grid[y + 1][x].row[0];
+        }
+    }
+
+    for (int x = 1; x < (IMWD/noOfThreads)/8; x++) {
+        grid[IMHT/8][x].top = grid[0][x].row[0];
+        grid[0][x].bottom = grid[IMHT/8][x].row[7];
     }
     
-    for (int y = 0; y < IMHT; y++) {
-        for (int x = 1; x <= ix; x++) {
-            uchar n = sumNeighbors(pre, x, y);
+}
 
-            if (n < 2) array[y][x] = 0;
-            //if (n == 2 || n == 3) // do nothing
-            if (n > 3) array[y][x] = 0;
-            if (n == 3) array[y][x] = 255;
+void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
+    pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]
+    readInPacked(dist_in, grid);
+    linkChunks(grid);
+
+    bool iterating = true;
+    while (iterating) {
+        //If even column: pass to right, then read from left
+        //If odd column : read from left, then pass to right
+        if ((id % 2) == 0) {
+            for (int y = 0; y<IMHT; y++) {
+                c_right <: grid[y][colWidth];
+                c_left  :> grid[y][0];
+
+                c_right :> grid[y][colWidth+1];
+                c_left  <: grid[y][1];
+            }
         }
+        else {
+            for (int y = 0; y<IMHT; y++) {
+                c_left :> grid[y][0];
+                c_right <: grid[y][colWidth];
+
+                c_left  <: grid[y][1];
+                c_right :> grid[y][colWidth+1];
+            }
+        } 
+
+        iteratePacked(grid);
+
+        dist_in <: 1;
+        dist_in :> iterating;
     }
 
-    //255 = WHITE
-    //0   = BLACK
+    int proceed;
+    dist_in :> proceed;
+
+    sendOutPacked(dist_in, grid); 
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
