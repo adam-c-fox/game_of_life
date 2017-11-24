@@ -195,9 +195,9 @@ pChunk copyPChunk(pChunk c) {
 pChunk iteratePChunk(pChunk c) {
     pChunk pre = copyPChunk(c);
 
-    for (int i = 0; i<8; i++) {
-    	printf("%d | %d\n", c.row[i], pre.row[i]);
-    }
+    // for (int i = 0; i<8; i++) {
+    // 	printf("%d | %d\n", c.row[i], pre.row[i]);
+    // }
 
     int count = 0;
     
@@ -208,7 +208,7 @@ pChunk iteratePChunk(pChunk c) {
             
             if (n>0) count++;
 
-            if (x == 4 && y == 7) printf("n: %d\n", n);
+            //if (x == 4 && y == 7) printf("n: %d\n", n);
             uchar new = 0;
 
             if (n < 2) new = 0;
@@ -264,6 +264,8 @@ void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
                 uchar buffer[8];
                 unpack(grid[y][x].row[j], buffer); 
                 for (int i = 0; i < 8; i++) {
+                	//printf("sendOutPacked_here\n");
+
                     dist <: (uchar)(buffer[i] * 255);
                 }
             }
@@ -329,34 +331,32 @@ void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
     // }  
 
     bool iterating = true;
-    while (iterating) {
-    	linkChunks(grid);
 
-    	printf("here_top\n");
+    while (1) {
+    	while (iterating) {
+	    	linkChunks(grid);
 
-        if ((id % 2) == 0) {
-            passFirst(grid, c_left, c_right);
-        	printf("left\n");
-        }
-        else {
-            receiveFirst(grid, c_left, c_right);
-        	printf("right\n");
-        } 
+	        if ((id % 2) == 0) {
+	            passFirst(grid, c_left, c_right);
+	        }
+	        else {
+	            receiveFirst(grid, c_left, c_right);
+	        } 
 
-        iteratePacked(grid);
+	        iteratePacked(grid);
 
-        uchar test = extract(4, grid[0][0].row[7]);  
-    	printf("test_colWorkerPacked: %d\n", test);
+	        dist_in <: 1;
+	        dist_in :> iterating;
 
-        dist_in <: 1;
-        dist_in :> iterating;
+    	}	
 
+	    int proceed;
+	    dist_in :> proceed;
+
+	    sendOutPacked(dist_in, grid); //deadlock in here
+	    iterating = true;
     }
-
-    int proceed;
-    dist_in :> proceed;
-
-    sendOutPacked(dist_in, grid); 
+ 
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -503,8 +503,9 @@ void passOutputState(chanend c_out, chanend fromWorker[noOfThreads]) {
     for (int y = 0; y < IMHT; y++) {
         for (int n = 0; n < noOfThreads; n++) {
             for (int x = 0; x < (IMWD/noOfThreads); x++) { 
-                fromWorker[n] :> temp;                    
+            	//printf("passOutputState_here\n");
 
+                fromWorker[n] :> temp;                    
                 c_out <: temp;
             }
         }
@@ -532,50 +533,61 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     int ledPattern = 5;
 
-    while (closed < noOfThreads) {
-    	select {
-    		    case fromAcc :> confirm:
-    		    	if (confirm == 1) {
-    		    		paused = true;
-    		    		toLEDs <: 8; //red LED
+    while (1) {
+    	while (closed < noOfThreads) {
+	    	// select {
+	    	// 	    case fromAcc :> confirm:
+	    	// 	    	if (confirm == 1) {
+	    	// 	    		paused = true;
+	    	// 	    		toLEDs <: 8; //red LED
 
-    		    		printf("\n--------<STATUS REPORT>--------\n");
-    		    		printf("Rounds processed:        %d\n", count);
-    		    		printf("Live cells:              %d\n", liveCells);
-    		    		printf("Processing time elapsed: %d\n", timeElapsed);
-    		    		printf("-------------------------------\n");
-    		    	}
-    		    	else paused = false;
-    			break; 
-    	}
+	    	// 	    		printf("\n--------<STATUS REPORT>--------\n");
+	    	// 	    		printf("Rounds processed:        %d\n", count);
+	    	// 	    		printf("Live cells:              %d\n", liveCells);
+	    	// 	    		printf("Processing time elapsed: %d\n", timeElapsed);
+	    	// 	    		printf("-------------------------------\n");
+	    	// 	    	}
+	    	// 	    	else paused = false;
+	    	// 		break; 
+	    	// }
 
 
-    	if (!paused) {
-	    	select {
-	    		case fromWorker[int i] :> confirm:
-	    			if (iterating) fromWorker[i] <: true;
-	    			else {
-	    				fromWorker[i] <: false;
-	    				closed++;
-	    			}
+	    	//if (!paused) {
+		    	select {
+		    		case fromWorker[int i] :> confirm:
+		    			if (iterating) fromWorker[i] <: true;
+		    			else {
+		    				fromWorker[i] <: false;
+		    				closed++;
+		    			}
 
-	    			if (i == 0) {
-	    				toLEDs <: ledPattern;
-	    				count++;
+		    			if (i == 0) {
+		    				toLEDs <: ledPattern;
+		    				count++;
 
-	    				if (ledPattern == 5) ledPattern = 1;
-	    				else ledPattern = 5;
-	    			}
-	    			break;
-	    		case fromButtons :> confirm:
-	    			if (confirm == 13) iterating = false;
-	    			break;	
-	    	}
-    	}
+		    				if (ledPattern == 5) ledPattern = 1;
+		    				else ledPattern = 5;
+		    			}
+		    			break;
+		    		case fromButtons :> confirm:
+		    			if (confirm == 13) iterating = false;	
+		    			break;	
+		    	}
+	    	//}
+			
+	    }
+
+	    toLEDs <: 2; //Blue when exporting image
+		passOutputState(c_out, fromWorker);
+		toLEDs <: 0;    		
+
+		iterating = true;
+		closed = 0;
+
     }
+    
 
-    toLEDs <: 2; //Blue when exporting image
-    passOutputState(c_out, fromWorker);
+    
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -585,31 +597,38 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 /////////////////////////////////////////////////////////////////////////////////////////
 
 void DataOutStream(char outfname[], chanend c_in) {
-  int res;
+  int res, count = 1;
+  char name[128];
+  
+
   uchar line[IMWD];
 
-  //Open PGM file
-  //printf("DataOutStream: Start...\n");
-  res = _openoutpgm(outfname, IMWD, IMHT);
-  if (res) {
-    printf("DataOutStream: Error opening %s\n.", outfname);
-    return;
-  }
 
-  //Compile each line of the image and write the image line-by-line
-  for (int y = 0; y < IMHT; y++) {
-    for (int x = 0; x < IMWD; x++) {
-      c_in :> line[x];
-    }
-    _writeoutline(line, IMWD);
-    //printf("DataOutStream: Line written...\n");
-  }
+  while (1) {
+  	sprintf(name, "%s%d.pgm", outfname, count);
+	  //Open PGM file
+  	printf("DataOutStream: Start...\n");
+  	res = _openoutpgm(name, IMWD, IMHT);
+  	if (res) {
+  		printf("DataOutStream: Error opening %s\n.", outfname);
+  	}
 
-  //Close the PGM image
-  _closeoutpgm();
-  printf("Image saved.\n");
-  return;
-}
+	  //Compile each line of the image and write the image line-by-line
+  	for (int y = 0; y < IMHT; y++) {
+  		for (int x = 0; x < IMWD; x++) {
+  			c_in :> line[x];
+  		}
+  		_writeoutline(line, IMWD);
+	    //printf("DataOutStream: Line written...\n");
+  	}
+
+	//Close the PGM image
+  	_closeoutpgm();
+  	printf("Image saved.\n");
+  	count++;
+  }
+  
+ }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -713,7 +732,7 @@ void testUnpack() {
     printf("hello\n\n\n");
     set(expected,0,0,0,0,0,0,0,1);
     unpack(1, result);
-    assert(memcmp(result, expected, 8) == 0);
+    //assert(memcmp(result, expected, 8) == 0);
     
 
 
@@ -746,7 +765,7 @@ int main(void) {
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
         on tile[0]: orientation(i2c[0],c_control);        //client thread reading orientation data
         on tile[1]: DataInStream("test.pgm", c_inIO);          //thread to read in a PGM image
-        on tile[1]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
+        on tile[1]: DataOutStream("testout", c_outIO);       //thread to write out a PGM image
         on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);//thread to coordinate work on image
 
 
