@@ -7,6 +7,7 @@
 #include "pgmIO.h"
 #include "i2c.h"
 #include <assert.h>
+#include <string.h>
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
@@ -107,7 +108,7 @@ typedef struct packedChunk pChunk;
 uchar pack(uchar cells[8]) {
     uchar result = 0;
     for (int i = 0; i < 8; i++) {
-        result = result | (cells[i] & 1) << i;
+        result = result | (cells[7 - i] & 1) << i;
     }
     return result;
 }
@@ -207,7 +208,7 @@ pChunk iteratePChunk(pChunk c) {
             
             if (n>0) count++;
 
-            //printf("n: %d\n", n);
+            if (x == 4 && y == 7) printf("n: %d\n", n);
             uchar new = 0;
 
             if (n < 2) new = 0;
@@ -635,10 +636,41 @@ void orientation(client interface i2c_master_if i2c, chanend toDist) {
   }
 }
 
+
+void set(uchar a[8], uchar v0, uchar v1, uchar v2, uchar v3, uchar v4, uchar v5, uchar v6, uchar v7) {
+    a[0] = v0; a[1] = v1; a[2] = v2; a[3] = v3; a[4] = v4; a[5] = v5; a[6] = v6; a[7] = v7;
+}
+
+
+void testPack() {
+    uchar test[8];
+    set(test,0,0,0,0,0,0,0,0);
+    assert(pack(test) == 0);
+    set(test,0,0,0,0,0,0,0,1);
+    assert(pack(test) == 1);
+    set(test,1,0,0,0,0,0,0,0);
+    assert(pack(test) == 128);
+    set(test,0,0,0,0,0,0,0,255);
+    assert(pack(test) == 1);
+    set(test,0,0,0,0,0,0,1,0);
+    assert(pack(test) == 2);
+    set(test,1,1,1,1,1,1,1,1);
+    assert(pack(test) == 255);
+    set(test,0,0,0,1,0,0,1,0);
+    assert(pack(test) == 18);
+}
+
+void testUnpack() {
+    uchar expected[8] = {0,0,0,0,0,0,0,0};
+    uchar result[8];
+    unpack(0, result);
+    assert(memcmp(result, expected, 8));
+    
+}
+
 void test() {
-   assert(2+2==4); 
-   assert(4-3==1);
-   printf("Quick maths\n");
+    testPack();
+    printf("All tests pass!\n");
 }
 
 
@@ -664,6 +696,8 @@ int main(void) {
         on tile[1]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
         on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);//thread to coordinate work on image
 
+
+        on tile[0]: test();
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
     
