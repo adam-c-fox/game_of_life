@@ -144,28 +144,27 @@ uchar sumNeighborsPacked(int x, int y, pChunk c) {
         for (int j = 0; j < 3; j++) {
             sum += extract(y + j, c.left);
         }
-
         left = 1;
     }
+
     if (x == 7) {
         for (int j = 0; j < 3; j++) {
             sum += extract(y + j, c.right);
         }
-
         right = 2;
     }
+
     if (y == 0) {
-		for (int i = 0; i < 3; i++) {
+    	for (int i = 0; i < 3; i++) {
             sum += extract(x + i, c.bottom);
         }
-
         bottom = 1;    	
     }
+
     if (y == 7) {
-		for (int i = 0; i < 3; i++) {
+    	for (int i = 0; i < 3; i++) {
             sum += extract(x + i, c.top);
         }
-
         top = 1;    	
     }
 
@@ -748,9 +747,81 @@ void testUnpack() {
     assert(test == 0);
 }
 
+void testExtract() {
+    uchar test;
+    test = 0;
+    assert(extract(0,test) == 0);
+    assert(extract(7,test) == 0);
+    assert(extract(5,test) == 0);
+    test = 1;
+    assert(extract(0,test) == 0);
+    assert(extract(7,test) == 1);
+    assert(extract(5,test) == 0);
+    test = 128;
+    assert(extract(0,test) == 1);
+    assert(extract(7,test) == 0);
+    assert(extract(5,test) == 0);
+    test = 130;
+    assert(extract(0,test) == 1);
+    assert(extract(7,test) == 0);
+    assert(extract(5,test) == 0);
+    assert(extract(6,test) == 1);
+    test = 255;
+    assert(extract(0,test) == 1);
+    assert(extract(1,test) == 1);
+    assert(extract(2,test) == 1);
+    assert(extract(3,test) == 1);
+    assert(extract(4,test) == 1);
+    assert(extract(5,test) == 1);
+    assert(extract(6,test) == 1);
+    assert(extract(7,test) == 1);
+}
+
+void testSumNeighbors() {
+    pChunk test;
+    test.left = 0;
+    test.right = 0;
+    test.top = 0; 
+    test.bottom = 0; 
+    set(test.row,0,0,0,0,0,0,0,0);
+    assert(sumNeighborsPacked(5,5,test) == 0);
+    assert(sumNeighborsPacked(0,5,test) == 0);
+    assert(sumNeighborsPacked(5,0,test) == 0);
+    assert(sumNeighborsPacked(0,0,test) == 0);
+    assert(sumNeighborsPacked(7,0,test) == 0);
+    assert(sumNeighborsPacked(7,7,test) == 0);
+
+    test.left = 0;
+    test.right = 0;
+    test.top = 0; 
+    test.bottom = 0; 
+    set(test.row,0,0,0,0,1,0,0,0);
+    assert(sumNeighborsPacked(5,5,test) == 0);
+    assert(sumNeighborsPacked(0,5,test) == 0);
+    assert(sumNeighborsPacked(5,0,test) == 0);
+    assert(sumNeighborsPacked(0,0,test) == 0);
+    assert(sumNeighborsPacked(7,0,test) == 0);
+    assert(sumNeighborsPacked(7,7,test) == 0);
+
+    test.left = 0;
+    test.right = 0;
+    test.top = 0; 
+    test.bottom = 0; 
+    set(test.row,0,0,0,0,0,0,0,0);
+    assert(sumNeighborsPacked(5,5,test) == 0);
+    assert(sumNeighborsPacked(0,5,test) == 0);
+    assert(sumNeighborsPacked(5,0,test) == 0);
+    assert(sumNeighborsPacked(0,0,test) == 0);
+    assert(sumNeighborsPacked(7,0,test) == 0);
+    assert(sumNeighborsPacked(7,7,test) == 0);
+}
+ 
+
 void test() {
     testPack();
     testUnpack();
+    testExtract();
+    testSumNeighbors();
     printf("All tests pass!\n");
 }
 
