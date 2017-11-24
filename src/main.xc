@@ -641,6 +641,15 @@ void set(uchar a[8], uchar v0, uchar v1, uchar v2, uchar v3, uchar v4, uchar v5,
     a[0] = v0; a[1] = v1; a[2] = v2; a[3] = v3; a[4] = v4; a[5] = v5; a[6] = v6; a[7] = v7;
 }
 
+void printByteRow(uchar a[8]) {
+    printf("[");
+    for (int i = 0; i < 7; i++) {
+        printf("%d,", a[i]);
+    }
+    printf("%d", a[7]);
+    printf("]\n");
+}
+
 
 void testPack() {
     uchar test[8];
@@ -661,15 +670,41 @@ void testPack() {
 }
 
 void testUnpack() {
-    uchar expected[8] = {0,0,0,0,0,0,0,0};
+    uchar expected[8];
     uchar result[8];
+    set(expected,0,0,0,0,0,0,0,0);
     unpack(0, result);
-    assert(memcmp(result, expected, 8));
+    printByteRow(result);
+    printByteRow(expected);
     
+    printf("result %d\n", memcmp(result, expected, 8));
+    assert(memcmp(result, expected, 8) == 0);
+    set(expected,0,0,0,0,0,0,0,1);
+    unpack(1, result);
+    assert(memcmp(result, expected, 8) == 0);
+    set(expected,0,0,0,0,0,0,0,0);
+    unpack(0, result);
+    assert(memcmp(result, expected, 8) == 0);
+    set(expected,0,0,0,0,0,0,0,0);
+    unpack(0, result);
+    assert(memcmp(result, expected, 8) == 0);
+    set(expected,0,0,0,0,0,0,0,0);
+    unpack(0, result);
+    assert(memcmp(result, expected, 8) == 0);
+    set(expected,0,0,0,0,0,0,0,0);
+    unpack(0, result);
+    assert(memcmp(result, expected, 8) == 0);
+    
+
+
+
+
+
 }
 
 void test() {
     testPack();
+    testUnpack();
     printf("All tests pass!\n");
 }
 
