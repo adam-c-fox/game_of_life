@@ -108,7 +108,7 @@ typedef struct packedChunk pChunk;
 uchar pack(uchar cells[8]) {
     uchar result = 0;
     for (int i = 0; i < 8; i++) {
-        result = result | (cells[7 - i] & 1) << i;
+        result = (result << 1) | (cells[i] & 1);
     }
     return result;
 }
@@ -518,8 +518,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     int value = 0;
 
     while (value != 14) {
-        //printf("Waiting for Button Press...\n");
-    	printf("Proceed with launch?\n");
+       	printf("Proceed with launch?\n");
     	fromButtons :> value;
     }
     
@@ -527,35 +526,55 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     passInitialState(c_in, fromWorker); 
 
-    int closed = 0, confirm;
-    bool iterating = true;
+    int closed = 0, count = 0, liveCells = 0, timeElapsed = 0, confirm;
+    bool iterating = true, paused = false;
     printf("Terminate at will...\n");
 
     int ledPattern = 5;
 
     while (closed < noOfThreads) {
     	select {
-    		case fromWorker[int i] :> confirm:
-    			if (iterating) fromWorker[i] <: true;
-    			else {
-    				fromWorker[i] <: false;
-    				closed++;
-    			}
+    		    case fromAcc :> confirm:
+    		    	if (confirm == 1) {
+    		    		paused = true;
+    		    		toLEDs <: 8; //red LED
 
-    			if (i == 0) {
-    				toLEDs <: ledPattern;
+    		    		printf("\n--------<STATUS REPORT>--------\n");
+    		    		printf("Rounds processed:        %d\n", count);
+    		    		printf("Live cells:              %d\n", liveCells);
+    		    		printf("Processing time elapsed: %d\n", timeElapsed);
+    		    		printf("-------------------------------\n");
+    		    	}
+    		    	else paused = false;
+    			break; 
+    	}
 
-    				if (ledPattern == 5) ledPattern = 1;
-    				else ledPattern = 5;
-    			}
-    			break;
-    		case fromButtons :> confirm:
-    			if (confirm == 13) iterating = false;
-    			break;	 
+
+    	if (!paused) {
+	    	select {
+	    		case fromWorker[int i] :> confirm:
+	    			if (iterating) fromWorker[i] <: true;
+	    			else {
+	    				fromWorker[i] <: false;
+	    				closed++;
+	    			}
+
+	    			if (i == 0) {
+	    				toLEDs <: ledPattern;
+	    				count++;
+
+	    				if (ledPattern == 5) ledPattern = 1;
+	    				else ledPattern = 5;
+	    			}
+	    			break;
+	    		case fromButtons :> confirm:
+	    			if (confirm == 13) iterating = false;
+	    			break;	
+	    	}
     	}
     }
 
-    toLEDs <: 0;
+    toLEDs <: 2; //Blue when exporting image
     passOutputState(c_out, fromWorker);
 }
 
@@ -631,6 +650,14 @@ void orientation(client interface i2c_master_if i2c, chanend toDist) {
       if (x>30) {
         tilted = 1 - tilted;
         toDist <: 1;
+      }
+
+
+      //TEST
+      //SEND SIGNAL WHEN TILTING CEASES
+      if (x<30) { 
+      	tilted = 0;
+      	toDist <: 0;
       }
     }
   }
