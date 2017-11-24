@@ -115,7 +115,7 @@ uchar pack(uchar cells[8]) {
 
 void unpack(uchar x, uchar cells[8]) {
     for (int i = 0; i < 8; i++) {
-        cells[i] = (x >> i) & 1;
+        cells[i] = (x >> (7 - i)) & 1;
     }
 }
 
@@ -694,30 +694,39 @@ void testPack() {
     assert(pack(test) == 255);
     set(test,0,0,0,1,0,0,1,0);
     assert(pack(test) == 18);
+    set(test,0,0,0,255,0,0,255,0);
+    assert(pack(test) == 18);
 }
 
 void testUnpack() {
     uchar expected[8];
     uchar result[8];
+    int test;
+
     set(expected,0,0,0,0,0,0,0,0);
     unpack(0, result);
-    printByteRow(result);
-    printByteRow(expected);
-    
-    //You can't call a function like memcmp within an assert
-    //Assert will not execute any side effects
-    //Why the last test fails. 
-    printf("result %d\n", memcmp(result, expected, 8));
-    int x = memcmp(result, expected, 8);
-    assert(x == 0);
-    printf("hello\n\n\n");
+    test = memcmp(result, expected, 8);
+    assert(test == 0);
+
     set(expected,0,0,0,0,0,0,0,1);
     unpack(1, result);
-    assert(memcmp(result, expected, 8) == 0);
+    test = memcmp(result, expected, 8);
+    assert(test == 0);
     
-
-
-
+    set(expected,1,0,0,0,0,0,0,0);
+    unpack(128, result);
+    test = memcmp(result, expected, 8);
+    assert(test == 0);
+    
+    set(expected,1,0,0,0,0,0,0,1);
+    unpack(129, result);
+    test = memcmp(result, expected, 8);
+    assert(test == 0);
+    
+    set(expected,1,1,1,1,1,1,1,1);
+    unpack(255, result);
+    test = memcmp(result, expected, 8);
+    assert(test == 0);
 }
 
 void test() {
