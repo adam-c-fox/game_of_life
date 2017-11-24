@@ -535,24 +535,24 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     while (1) {
     	while (closed < noOfThreads) {
-	    	// select {
-	    	// 	    case fromAcc :> confirm:
-	    	// 	    	if (confirm == 1) {
-	    	// 	    		paused = true;
-	    	// 	    		toLEDs <: 8; //red LED
+	    	select {
+	    		    case fromAcc :> confirm:
+	    		    	if (confirm == 1) {
+	    		    		paused = true;
+	    		    		toLEDs <: 8; //red LED
 
-	    	// 	    		printf("\n--------<STATUS REPORT>--------\n");
-	    	// 	    		printf("Rounds processed:        %d\n", count);
-	    	// 	    		printf("Live cells:              %d\n", liveCells);
-	    	// 	    		printf("Processing time elapsed: %d\n", timeElapsed);
-	    	// 	    		printf("-------------------------------\n");
-	    	// 	    	}
-	    	// 	    	else paused = false;
-	    	// 		break; 
-	    	// }
+	    		    		printf("\n--------<STATUS REPORT>--------\n");
+	    		    		printf("Rounds processed:        %d\n", count);
+	    		    		printf("Live cells:              %d\n", liveCells);
+	    		    		printf("Processing time elapsed: %d\n", timeElapsed);
+	    		    		printf("-------------------------------\n");
+	    		    	}
+	    		    	else paused = false;
+	    			break; 
+	    	}
 
 
-	    	//if (!paused) {
+	    	if (!paused) {
 		    	select {
 		    		case fromWorker[int i] :> confirm:
 		    			if (iterating) fromWorker[i] <: true;
@@ -573,7 +573,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 		    			if (confirm == 13) iterating = false;	
 		    			break;	
 		    	}
-	    	//}
+	    	}
 			
 	    }
 
@@ -729,13 +729,9 @@ void testUnpack() {
 
     set(expected,0,0,0,0,0,0,0,1);
     unpack(1, result);
-<<<<<<< HEAD
     test = memcmp(result, expected, 8);
     assert(test == 0);
-=======
-    //assert(memcmp(result, expected, 8) == 0);
->>>>>>> 9317f6661c6d821a32337a7c8977c3b00abcea4d
-    
+
     set(expected,1,0,0,0,0,0,0,0);
     unpack(128, result);
     test = memcmp(result, expected, 8);
