@@ -527,51 +527,49 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     passInitialState(c_in, fromWorker); 
 
     int closed = 0, count = 0, liveCells = 0, timeElapsed = 0, confirm;
-    bool iterating = true, paused = false;
+    bool iterating = true;
     printf("Terminate at will...\n");
 
     int ledPattern = 5;
 
     while (1) {
     	while (closed < noOfThreads) {
+
 	    	select {
-	    		    case fromAcc :> confirm:
-	    		    	if (confirm == 1) {
-	    		    		paused = true;
-	    		    		toLEDs <: 8; //red LED
+                case fromAcc :> confirm:
+                    if (confirm == 1) {
+                        toLEDs <: 8; //red LED
 
-	    		    		printf("\n--------<STATUS REPORT>--------\n");
-	    		    		printf("Rounds processed:        %d\n", count);
-	    		    		printf("Live cells:              %d\n", liveCells);
-	    		    		printf("Processing time elapsed: %d\n", timeElapsed);
-	    		    		printf("-------------------------------\n");
-	    		    	}
-	    		    	else paused = false;
-	    			break; 
-	    	}
+                        printf("\n-------< STATUS REPORT >-------\n");
+                        printf("Rounds processed:        %d\n", count);
+                        printf("Live cells:              %d\n", liveCells);
+                        printf("Processing time elapsed: %d\n", timeElapsed);
+                        printf("-------------------------------\n\n");
+                    }
 
+                    int temp;
+                    printf("here\n");
+                    fromAcc :> temp;
+                    printf("hereagain\n");
+                    break; 
+	    		case fromWorker[int i] :> confirm:
+	    			if (iterating) fromWorker[i] <: true;
+	    			else {
+	    				fromWorker[i] <: false;
+	    				closed++;
+	    			}
 
-	    	if (!paused) {
-		    	select {
-		    		case fromWorker[int i] :> confirm:
-		    			if (iterating) fromWorker[i] <: true;
-		    			else {
-		    				fromWorker[i] <: false;
-		    				closed++;
-		    			}
+	    			if (i == 0) {
+	    				toLEDs <: ledPattern;
+	    				count++;
 
-		    			if (i == 0) {
-		    				toLEDs <: ledPattern;
-		    				count++;
-
-		    				if (ledPattern == 5) ledPattern = 1;
-		    				else ledPattern = 5;
-		    			}
-		    			break;
-		    		case fromButtons :> confirm:
-		    			if (confirm == 13) iterating = false;	
-		    			break;	
-		    	}
+	    				if (ledPattern == 5) ledPattern = 1;
+	    				else ledPattern = 5;
+	    			}
+	    			break;
+	    		case fromButtons :> confirm:
+	    			if (confirm == 13) iterating = false;	
+	    			break;	
 	    	}
 			
 	    }
@@ -669,15 +667,15 @@ void orientation(client interface i2c_master_if i2c, chanend toDist) {
         tilted = 1 - tilted;
         toDist <: 1;
       }
-
-
-      //TEST
-      //SEND SIGNAL WHEN TILTING CEASES
-      if (x<30) { 
-      	tilted = 0;
-      	toDist <: 0;
-      }
     }
+
+    if (tilted) {
+        if (x<30) {
+            tilted = 1 - tilted;
+            toDist <: 0;
+        }
+    }
+
   }
 }
 
