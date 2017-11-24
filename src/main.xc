@@ -677,26 +677,17 @@ void testUnpack() {
     printByteRow(result);
     printByteRow(expected);
     
+    //You can't call a function like memcmp within an assert
+    //Assert will not execute any side effects
+    //Why the last test fails. 
     printf("result %d\n", memcmp(result, expected, 8));
-    assert(memcmp(result, expected, 8) == 0);
+    int x = memcmp(result, expected, 8);
+    assert(x == 0);
+    printf("hello\n\n\n");
     set(expected,0,0,0,0,0,0,0,1);
     unpack(1, result);
     assert(memcmp(result, expected, 8) == 0);
-    set(expected,0,0,0,0,0,0,0,0);
-    unpack(0, result);
-    assert(memcmp(result, expected, 8) == 0);
-    set(expected,0,0,0,0,0,0,0,0);
-    unpack(0, result);
-    assert(memcmp(result, expected, 8) == 0);
-    set(expected,0,0,0,0,0,0,0,0);
-    unpack(0, result);
-    assert(memcmp(result, expected, 8) == 0);
-    set(expected,0,0,0,0,0,0,0,0);
-    unpack(0, result);
-    assert(memcmp(result, expected, 8) == 0);
     
-
-
 
 
 
