@@ -817,6 +817,7 @@ void testSumNeighbors() {
     test.right = 0;
     test.top = 0; 
     test.bottom = 0; 
+    test.corners = 0; 
     set(test.row,0,0,0,0,0,0,0,0);
     assert(sumNeighborsPacked(5,5,test) == 0);
     assert(sumNeighborsPacked(0,5,test) == 0);
@@ -829,21 +830,14 @@ void testSumNeighbors() {
     test.right = 0;
     test.top = 0; 
     test.bottom = 0; 
+    test.corners = 0; 
     set(test.row,0,0,0,0,0,8,4,28);
     assert(sumNeighborsPacked(4,5,test) == 1);
     assert(sumNeighborsPacked(3,4,test) == 1);
-
-    test.left = 0;
-    test.right = 0;
-    test.top = 0; 
-    test.bottom = 0; 
-    set(test.row,0,0,0,0,0,0,0,0);
-    assert(sumNeighborsPacked(5,5,test) == 0);
-    assert(sumNeighborsPacked(0,5,test) == 0);
-    assert(sumNeighborsPacked(5,0,test) == 0);
-    assert(sumNeighborsPacked(0,0,test) == 0);
-    assert(sumNeighborsPacked(7,0,test) == 0);
-    assert(sumNeighborsPacked(7,7,test) == 0);
+    assert(sumNeighborsPacked(2,4,test) == 0);
+    printf("%d\n", sumNeighborsPacked(4,6,test));
+    assert(sumNeighborsPacked(4,6,test) == 5);
+    assert(sumNeighborsPacked(5,7,test) == 2);
 }
  
 
