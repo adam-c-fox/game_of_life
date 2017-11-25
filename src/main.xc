@@ -100,7 +100,7 @@ void DataInStream(char infname[], chanend c_out) {
 /////////////////////////////////////////////////////////////////////////////////////////
 
 struct packedChunk {
-    uchar left, right, top, bottom;
+    uchar left, right, top, bottom, corners;
     uchar row[8];
 };
 typedef struct packedChunk pChunk;
@@ -120,6 +120,8 @@ void unpack(uchar x, uchar cells[8]) {
 }
 
 uchar extract(int n, uchar x) {
+    assert(n < 8);
+
     return (x >> (7-n)) & 1;
 }
 
@@ -135,42 +137,56 @@ int sumGroup(int x, int y, int x_min, int x_max, int y_min, int y_max, pChunk c)
     return sum;
 }
 
+//Sums edge, includes 0 value corner
+int sumEdge(int n, uchar edge, uchar corner, bool takeLeft) {
+    int sum = 0;
+
+    if (n == 0) {
+        for (int i = 0; i < 2; i++) {
+            sum += extract(n + i, edge);
+        }
+        if (takeLeft) sum += corner;
+    }    
+    else if (n == 7) {
+        for (int i = -1; i < 1; i++) {
+            sum += extract(n + i, edge);
+        }
+        if (!takeLeft) sum += corner;
+    }
+    else {
+        for (int i = -1; i < 2; i++) {
+            sum += extract(n + i, edge);
+        }
+    }
+
+    return sum;
+}
+
 uchar sumNeighborsPacked(int x, int y, pChunk c) {
     int sum = 0;
-    int bottom = 0, left = 0, top = 3, right = 3;
+    int bottom = 3, left = 0, top = 0, right = 3;
 
-
+    //Edges
     if (x == 0) {
-        for (int j = 0; j < 3; j++) {
-            sum += extract(y + j, c.left);
-        }
+        sum += sumEdge(y, c.left, extract(0, c.corners), true);
         left = 1;
-    }
-
+    }    
     if (x == 7) {
-        for (int j = 0; j < 3; j++) {
-            sum += extract(y + j, c.right);
-        }
+        sum += sumEdge(y, c.right, extract(2, c.corners), false);
         right = 2;
     }
-
     if (y == 0) {
-    	for (int i = 0; i < 3; i++) {
-            sum += extract(x + i, c.bottom);
-        }
-        bottom = 1;    	
+    	sum += sumEdge(x, c.top, extract(1, c.corners), false);
+        top = 1;
     }
-
     if (y == 7) {
-    	for (int i = 0; i < 3; i++) {
-            sum += extract(x + i, c.top);
-        }
-        top = 1;    	
+    	sum += sumEdge(y, c.bottom, extract(3, c.corners), true);
+        bottom = 2;            	
     }
 
     //printf("x: %d | y: %d\n", x, y);
     //printf("sum: %d\n", sum);
-    sum += sumGroup(x, y, left, right, bottom, top, c);
+    sum += sumGroup(x, y, left, right, top, bottom, c);
 
     return sum;
 }
@@ -250,6 +266,7 @@ void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
                     else buffer[i] = 0;
                 }
                 grid[y][x].row[j] = pack(buffer);
+                printf("grid[y][x].row[j]: %d\n", grid[y][x].row[j]);
             }
         }
     }
@@ -280,6 +297,24 @@ uchar getRow(int n, pChunk c) {
     return result;
 }
 
+void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
+    uchar cornersArray[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+    for (int y = 1; y < IMHT/8 - 1; y++) {
+        for (int x = 1; x < (IMWD/noOfThreads)/8 - 1; x++) {
+            cornersArray[0] = extract(7, grid[y-1][x].left);
+            cornersArray[1] = extract(7, grid[y-1][x].right);
+
+            cornersArray[2] = extract(0, grid[y+1][x].right);
+            cornersArray[3] = extract(0, grid[y+1][x].left);
+
+
+            grid[y][x].corners = pack(cornersArray);
+        }
+    }
+
+}
+
 void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     for (int y = 1; y < IMHT/8 - 1; y++) {
         for (int x = 1; x < (IMWD/noOfThreads)/8 - 1; x++) {
@@ -294,7 +329,8 @@ void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
         grid[IMHT/8 - 1][x].top = grid[0][x].row[0];
         grid[0][x].bottom = grid[IMHT/8 - 1][x].row[7];
     }
-    
+
+    linkCorners(grid);
 }
 
 void passFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
@@ -793,13 +829,9 @@ void testSumNeighbors() {
     test.right = 0;
     test.top = 0; 
     test.bottom = 0; 
-    set(test.row,0,0,0,0,1,0,0,0);
-    assert(sumNeighborsPacked(5,5,test) == 0);
-    assert(sumNeighborsPacked(0,5,test) == 0);
-    assert(sumNeighborsPacked(5,0,test) == 0);
-    assert(sumNeighborsPacked(0,0,test) == 0);
-    assert(sumNeighborsPacked(7,0,test) == 0);
-    assert(sumNeighborsPacked(7,7,test) == 0);
+    set(test.row,0,0,0,0,0,8,4,28);
+    assert(sumNeighborsPacked(4,5,test) == 1);
+    assert(sumNeighborsPacked(3,4,test) == 1);
 
     test.left = 0;
     test.right = 0;
