@@ -166,38 +166,41 @@ void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     readIn(dist_in, grid);
 
     bool iterating = true;
-    while (iterating) {
-        //If even column: pass to right, then read from left
-        //If odd column : read from left, then pass to right
-        if ((id % 2) == 0) {
-            for (int y = 0; y<IMHT; y++) {
-                c_right <: grid[y][colWidth];
-                c_left  :> grid[y][0];
+    while (1) {
+        while (iterating) {
+            //If even column: pass to right, then read from left
+            //If odd column : read from left, then pass to right
+            if ((id % 2) == 0) {
+                for (int y = 0; y<IMHT; y++) {
+                    c_right <: grid[y][colWidth];
+                    c_left  :> grid[y][0];
 
-                c_right :> grid[y][colWidth+1];
-                c_left  <: grid[y][1];
+                    c_right :> grid[y][colWidth+1];
+                    c_left  <: grid[y][1];
+                }
             }
+            else {
+                for (int y = 0; y<IMHT; y++) {
+                    c_left :> grid[y][0];
+                    c_right <: grid[y][colWidth];
+
+                    c_left  <: grid[y][1];
+                    c_right :> grid[y][colWidth+1];
+                }
+            } 
+
+            iterate(grid);
+
+            dist_in <: 1;
+            dist_in :> iterating;
         }
-        else {
-            for (int y = 0; y<IMHT; y++) {
-                c_left :> grid[y][0];
-                c_right <: grid[y][colWidth];
 
-                c_left  <: grid[y][1];
-                c_right :> grid[y][colWidth+1];
-            }
-        } 
+        int proceed;
+        dist_in :> proceed;
 
-        iterate(grid);
-
-        dist_in <: 1;
-        dist_in :> iterating;
+        sendOut(dist_in, grid); 
+        iterating = true;
     }
-
-    int proceed;
-    dist_in :> proceed;
-
-    sendOut(dist_in, grid); 
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
