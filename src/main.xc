@@ -121,7 +121,6 @@ void unpack(uchar x, uchar cells[8]) {
 
 uchar extract(int n, uchar x) {
     assert(n < 8);
-
     return (x >> (7-n)) & 1;
 }
 
@@ -129,11 +128,9 @@ int sumGroup(int x, int y, int x_min, int x_max, int y_min, int y_max, pChunk c)
     int sum = 0;
     for (int j = y_min; j < y_max; j++) {
         for (int i = x_min; i < x_max; i++) {        	
-        	//printf("sum: %d\n", sum);
-            if ((i != 1) && (j != 1)) sum += extract(i + x - 1, c.row[j + y - 1]);
+            if (!(i == 1 && j == 1)) sum += extract(i + x - 1, c.row[j + y - 1]);
         } 
     }
-    //printf("sum: %d\n", sum);
     return sum;
 }
 
@@ -214,28 +211,26 @@ pChunk iteratePChunk(pChunk c) {
     // 	printf("%d | %d\n", c.row[i], pre.row[i]);
     // }
 
-    int count = 0;
     
     for (int y = 0; y < 8; y++) {
         uchar result = 0;
         for (int x = 0; x < 8; x++) { 
             uchar n = sumNeighborsPacked(x, y, pre);
-            
-            if (n>0) count++;
-
-            //if (x == 4 && y == 7) printf("n: %d\n", n);
             uchar new = 0;
 
             if (n < 2) new = 0;
             if (n == 2 || n == 3)  new = extract(x, pre.row[y]); // think carefully about this
             if (n > 3) new = 0;
-            if (n == 3) new = 1;
+            if (n == 3) { 
+            printf("%d %d \n",x,y);    
+            new = 1;
+}
 
             //if (new != 0) printf("new: %d\n", new);
-            result = result | new << x;
+            result = (result << 1) | (new & 1);
         }
         c.row[y] = result;
-        //printf("c.row[y]: %d\n", c.row[y]);
+        printf("c.row[y]: %d\n", c.row[y]);
     }
     //printf("count: %d\n", count);
     return c;
@@ -266,7 +261,7 @@ void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
                     else buffer[i] = 0;
                 }
                 grid[y][x].row[j] = pack(buffer);
-                printf("grid[y][x].row[j]: %d\n", grid[y][x].row[j]);
+                //printf("grid[y][x].row[j]: %d\n", grid[y][x].row[j]);
             }
         }
     }
@@ -315,21 +310,31 @@ void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 
 }
 
+// none of this is correct
 void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     for (int y = 1; y < IMHT/8 - 1; y++) {
         for (int x = 1; x < (IMWD/noOfThreads)/8 - 1; x++) {
             grid[y][x].left = getRow(7, grid[y][x]);
             grid[y][x].right = getRow(0, grid[y][x]);
-            grid[y][x].bottom = grid[y - 1][x].row[7];
-            grid[y][x].top = grid[y + 1][x].row[0];
+        }
+    }
+
+    for (int y = 1; y < IMHT/8; y++) {
+        for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
+            grid[y][x].top = grid[y - 1][x].row[7];
+        }
+    }
+
+    for (int y = 0; y < IMHT/8 - 1; y++) {
+        for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
+            grid[y][x].bottom = grid[y + 1][x].row[0];//I suspect these are wrong
         }
     }
 
     for (int x = 1; x < (IMWD/noOfThreads)/8; x++) {
-        grid[IMHT/8 - 1][x].top = grid[0][x].row[0];
-        grid[0][x].bottom = grid[IMHT/8 - 1][x].row[7];
+        grid[IMHT/8 - 1][x].bottom = grid[0][x].row[0];
+        grid[0][x].top = grid[IMHT/8 - 1][x].row[7];
     }
-
     linkCorners(grid);
 }
 
@@ -813,6 +818,7 @@ void testExtract() {
 
 void testSumNeighbors() {
     pChunk test;
+    pChunk testBelow;
     test.left = 0;
     test.right = 0;
     test.top = 0; 
@@ -832,20 +838,144 @@ void testSumNeighbors() {
     test.bottom = 0; 
     test.corners = 0; 
     set(test.row,0,0,0,0,0,8,4,28);
-    assert(sumNeighborsPacked(4,5,test) == 1);
-    assert(sumNeighborsPacked(3,4,test) == 1);
     assert(sumNeighborsPacked(2,4,test) == 0);
-    printf("%d\n", sumNeighborsPacked(4,6,test));
+    assert(sumNeighborsPacked(2,5,test) == 0);
+    assert(sumNeighborsPacked(2,6,test) == 1);
+    assert(sumNeighborsPacked(2,7,test) == 1);
+    
+    assert(sumNeighborsPacked(3,4,test) == 1);
+    assert(sumNeighborsPacked(3,5,test) == 1);
+    assert(sumNeighborsPacked(3,6,test) == 3);
+    assert(sumNeighborsPacked(3,7,test) == 1);
+
+    assert(sumNeighborsPacked(4,4,test) == 1);
+    assert(sumNeighborsPacked(4,5,test) == 1);
     assert(sumNeighborsPacked(4,6,test) == 5);
+    assert(sumNeighborsPacked(4,7,test) == 3);
+
+    assert(sumNeighborsPacked(5,4,test) == 1);
+    assert(sumNeighborsPacked(5,5,test) == 2);
+    assert(sumNeighborsPacked(5,6,test) == 3);
     assert(sumNeighborsPacked(5,7,test) == 2);
+
+    assert(sumNeighborsPacked(6,4,test) == 0);
+    assert(sumNeighborsPacked(6,5,test) == 1);
+    assert(sumNeighborsPacked(6,6,test) == 2);
+    assert(sumNeighborsPacked(6,7,test) == 2);
+
+    assert(sumNeighborsPacked(7,4,test) == 0);
+    assert(sumNeighborsPacked(7,5,test) == 0);
+    assert(sumNeighborsPacked(7,6,test) == 0);
+    assert(sumNeighborsPacked(7,7,test) == 0);
+
+    testBelow.left = 0;
+    testBelow.right = 0;
+    testBelow.top = 28; 
+    testBelow.bottom = 0; 
+    testBelow.corners = 0; 
+    set(testBelow.row,0,0,0,0,0,0,0,0);
+    assert(sumNeighborsPacked(0,0,testBelow) == 0);
+    assert(sumNeighborsPacked(1,0,testBelow) == 0);
+    assert(sumNeighborsPacked(2,0,testBelow) == 1);
+    assert(sumNeighborsPacked(3,0,testBelow) == 2);
+    assert(sumNeighborsPacked(4,0,testBelow) == 3);
+    assert(sumNeighborsPacked(5,0,testBelow) == 2);
+    assert(sumNeighborsPacked(6,0,testBelow) == 1);
+    assert(sumNeighborsPacked(7,0,testBelow) == 0);
+
+    assert(sumNeighborsPacked(0,1,testBelow) == 0);
+    assert(sumNeighborsPacked(1,1,testBelow) == 0);
+    assert(sumNeighborsPacked(2,1,testBelow) == 0);
+    assert(sumNeighborsPacked(3,1,testBelow) == 0);
+    assert(sumNeighborsPacked(4,1,testBelow) == 0);
+    assert(sumNeighborsPacked(5,1,testBelow) == 0);
+    assert(sumNeighborsPacked(6,1,testBelow) == 0);
+    assert(sumNeighborsPacked(7,1,testBelow) == 0);
+} 
+
+
+//Needs further tests
+void testLinkChunks() {
+    pChunk array[IMHT/8][(IMWD/noOfThreads)/8];
+    pChunk test;
+    pChunk testBelow;
+    test.left = 0;
+    test.right = 0;
+    test.top = 0; 
+    test.bottom = 0; 
+    test.corners = 0; 
+    set(test.row,0,0,0,0,0,8,4,28);
+    array[0][0] = test;
+
+    testBelow.left = 0;
+    testBelow.right = 0;
+    testBelow.top = 0; 
+    testBelow.bottom = 0; 
+    testBelow.corners = 0; 
+    set(testBelow.row,0,0,0,0,0,0,0,0);
+    array[1][0] = testBelow;
+    linkChunks(array);
+    assert(extract(3,array[1][0].top) == 1);
+    assert(extract(4,array[1][0].top) == 1);
+    assert(extract(5,array[1][0].top) == 1);
+    assert(extract(0,array[1][0].top) == 0);
+    assert(extract(1,array[1][0].top) == 0);
+    assert(extract(2,array[1][0].top) == 0);
+    assert(extract(6,array[1][0].top) == 0);
+    assert(extract(7,array[1][0].top) == 0);
+   
 }
  
+void testIteratePChunk() {
+    pChunk new;
+    pChunk newBelow;
+    pChunk test;
+    pChunk testBelow;
+    test.left = 0;
+    test.right = 0;
+    test.top = 0; 
+    test.bottom = 0; 
+    test.corners = 0; 
+    set(test.row,0,0,0,0,0,0,0,0);
+    new = iteratePChunk(test);
+    assert(extract(3,new.row[2]) == 0);
+    assert(extract(4,new.row[5]) == 0);
+    assert(extract(3,new.row[0]) == 0);
+    assert(extract(6,new.row[7]) == 0);
+    assert(extract(7,new.row[7]) == 0);
+    assert(extract(0,new.row[0]) == 0);
+
+    test.left = 0;
+    test.right = 0;
+    test.top = 0; 
+    test.bottom = 0; 
+    test.corners = 0; 
+    set(test.row,0,0,0,0,0,8,4,28);
+    new = iteratePChunk(test);
+    assert(extract(3,new.row[6]) == 1);
+    assert(extract(4,new.row[7]) == 1);
+    assert(extract(5,new.row[7]) == 1);
+    assert(extract(5,new.row[6]) == 1);
+    assert(extract(5,new.row[7]) == 1);
+    assert(extract(0,new.row[0]) == 0);
+    testBelow.left = 0;
+    testBelow.right = 0;
+    testBelow.top = 28; 
+    testBelow.bottom = 0; 
+    testBelow.corners = 0; 
+    set(testBelow.row,0,0,0,0,0,0,0,0);
+    newBelow = iteratePChunk(testBelow);
+    assert(extract(4,newBelow.row[7]) == 1);
+}
+
 
 void test() {
     testPack();
     testUnpack();
     testExtract();
     testSumNeighbors();
+    testLinkChunks();
+    //testIteratePChunk();
     printf("All tests pass!\n");
 }
 
