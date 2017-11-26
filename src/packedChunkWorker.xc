@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <string.h>
 #include "size.h"
+#include "packedChunkWorker.h"
 
 typedef unsigned char uchar;      //using uchar as shorthand
 typedef enum { false, true } bool; 
@@ -90,13 +91,13 @@ static uchar sumNeighborsPacked(int x, int y, pChunk c) {
         top = 1;
     }
     if (y == 7) {
-    	sum += sumEdge(y, c.bottom, extract(3, c.corners), true);
+    	sum += sumEdge(x, c.bottom, extract(3, c.corners), true);
+        //printf("sum: %d | c.bottom: %d\n", sum, c.bottom);
         bottom = 2;            	
     }
 
-    //printf("x: %d | y: %d\n", x, y);
-    //printf("sum: %d\n", sum);
     sum += sumGroup(x, y, left, right, top, bottom, c);
+    //printf("slowpls\n");
 
     return sum;
 }
@@ -126,17 +127,23 @@ static pChunk iteratePChunk(pChunk c) {
             uchar n = sumNeighborsPacked(x, y, pre);
             uchar new = 0;
 
-            if (n < 2) new = 0;
-            if (n == 2 || n == 3)  new = extract(x, pre.row[y]); // think carefully about thisis n ==3 needed here?
-            if (n > 3) new = 0;
+            if (n < 2)  new = 0;
+            if (n == 2) new = extract(x, pre.row[y]); 
             if (n == 3) new = 1;
+            if (n > 3)  new = 0;
 
-            //if (new != 0) printf("new: %d\n", new);
             result = (result << 1) | (new & 1);
+
+            // if(extract(x, pre.row[y]) == 1) {
+            //     printf("x: %d | y: %d | n: %d | result: %d\n", x, y, n, result);
+            // }
+            // if(x == 4 && y == 7 && n == 3) {
+            //     printf("HELLO\n");
+            // }
         }
+        //printf("result: %d\n", result);
         c.row[y] = result;
     }
-    //printf("count: %d\n", count);
     return c;
 }
 
@@ -165,7 +172,6 @@ static void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]
                     else buffer[i] = 0;
                 }
                 grid[y][x].row[j] = pack(buffer);
-                //printf("grid[y][x].row[j]: %d\n", grid[y][x].row[j]);
             }
         }
     }
@@ -179,8 +185,6 @@ static void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8
                 uchar buffer[8];
                 unpack(grid[y][x].row[j], buffer); 
                 for (int i = 0; i < 8; i++) {
-                	//printf("sendOutPacked_here\n");
-
                     dist <: (uchar)(buffer[i] * 255);
                 }
             }
@@ -188,10 +192,10 @@ static void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8
     }
 }
 
-static uchar getRow(int n, pChunk c) {
+static uchar getCol(int n, pChunk c) {
     uchar result = 0;
     for (int i = 0; i < 8; i++) {
-        result | (c.row[i] & 1) << i;
+        result = (result << 1) | (extract(n, c.row[i]) & 1);
     }
     return result;
 }
@@ -207,7 +211,6 @@ static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
             cornersArray[2] = extract(0, grid[y+1][x].right);
             cornersArray[3] = extract(0, grid[y+1][x].left);
 
-
             grid[y][x].corners = pack(cornersArray);
         }
     }
@@ -218,8 +221,8 @@ static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 static void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     for (int y = 1; y < IMHT/8 - 1; y++) {
         for (int x = 1; x < (IMWD/noOfThreads)/8 - 1; x++) {
-            grid[y][x].left = getRow(7, grid[y][x]);
-            grid[y][x].right = getRow(0, grid[y][x]);
+            grid[y][x].left = getCol(7, grid[y][x-1]);
+            grid[y][x].right = getCol(0, grid[y][x+1]);
         }
     }
 
@@ -231,11 +234,11 @@ static void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 
     for (int y = 0; y < IMHT/8 - 1; y++) {
         for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
-            grid[y][x].bottom = grid[y + 1][x].row[0];//I suspect these are wrong
+            grid[y][x].bottom = grid[y + 1][x].row[0];     //I suspect these are wrong
         }
     }
 
-    for (int x = 1; x < (IMWD/noOfThreads)/8; x++) {
+    for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
         grid[IMHT/8 - 1][x].bottom = grid[0][x].row[0];
         grid[0][x].top = grid[IMHT/8 - 1][x].row[7];
     }
@@ -245,10 +248,10 @@ static void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 static void passFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
     int last = (IMWD/noOfThreads)/8 - 1;
     for (int y = 0; y < IMHT/8; y++) {
-        c_left  <: getRow(0, grid[y][0]);
+        c_left  <: getCol(0, grid[y][0]);
 		c_right :> grid[y][last].right;        
 
-        c_right <: getRow(7, grid[y][last]);
+        c_right <: getCol(7, grid[y][last]);
         c_left  :> grid[y][0].left;        
     }
 }
@@ -257,10 +260,10 @@ static void receiveFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_le
     int last = (IMWD/noOfThreads)/8 - 1;
     for (int y = 0; y < IMHT/8; y++) {
     	c_right :> grid[y][last].right;
-        c_left  <: getRow(0, grid[y][0]);
+        c_left  <: getCol(0, grid[y][0]);
 
         c_left  :> grid[y][0].left;
-        c_right <: getRow(7, grid[y][last]);
+        c_right <: getCol(7, grid[y][last]);
     }
 }
 
@@ -268,17 +271,10 @@ void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
     pChunk grid[IMHT/8][(IMWD/noOfThreads)/8];
     readInPacked(dist_in, grid);    
 
-
-    
-    // for (int i = 0; i<8; i++) {
-    // 	printf("%d: row: %d\n", i, grid[0][0].row[i]);	
-    // }  
-
     bool iterating = true;
 
     while (1) {
     	while (iterating) {
-	    	linkChunks(grid);
 
 	        if ((id % 2) == 0) {
 	            passFirst(grid, c_left, c_right);
@@ -286,6 +282,8 @@ void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
 	        else {
 	            receiveFirst(grid, c_left, c_right);
 	        } 
+
+            linkChunks(grid);
 
 	        iteratePacked(grid);
 
@@ -297,14 +295,18 @@ void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
 	    int proceed;
 	    dist_in :> proceed;
 
-	    sendOutPacked(dist_in, grid); //deadlock in here
+	    sendOutPacked(dist_in, grid); 
 	    iterating = true;
     }
  
 }
 
 
-///////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+// Testing.
+//
+/////////////////////////////////////////////////////////////////////////////////////////
 
 static void set(uchar a[8], uchar v0, uchar v1, uchar v2, uchar v3, uchar v4, uchar v5, uchar v6, uchar v7) {
     a[0] = v0; a[1] = v1; a[2] = v2; a[3] = v3; a[4] = v4; a[5] = v5; a[6] = v6; a[7] = v7;
@@ -530,6 +532,18 @@ static void testIteratePChunk() {
     assert(extract(7,new.row[7]) == 0);
     assert(extract(0,new.row[0]) == 0);
 
+
+    assert(extract(1,new.row[0]) == 0);
+    assert(extract(2,new.row[0]) == 0);
+    assert(extract(3,new.row[0]) == 0);
+    assert(extract(4,new.row[0]) == 0);
+    assert(extract(5,new.row[0]) == 0);
+    assert(extract(6,new.row[0]) == 0);
+    assert(extract(7,new.row[0]) == 0);
+    assert(extract(0,new.row[0]) == 0);
+
+
+
     test.left = 0;
     test.right = 0;
     test.top = 0; 
@@ -543,6 +557,18 @@ static void testIteratePChunk() {
     assert(extract(5,new.row[6]) == 1);
     assert(extract(5,new.row[7]) == 1);
     assert(extract(0,new.row[0]) == 0);
+
+    assert(extract(1,new.row[0]) == 0);
+    assert(extract(2,new.row[0]) == 0);
+    assert(extract(3,new.row[0]) == 0);
+    assert(extract(4,new.row[0]) == 0);
+    assert(extract(5,new.row[0]) == 0);
+    assert(extract(6,new.row[0]) == 0);
+    assert(extract(7,new.row[0]) == 0);
+    assert(extract(0,new.row[0]) == 0);
+
+
+
     testBelow.left = 0;
     testBelow.right = 0;
     testBelow.top = 28; 
@@ -551,6 +577,34 @@ static void testIteratePChunk() {
     set(testBelow.row,0,0,0,0,0,0,0,0);
     newBelow = iteratePChunk(testBelow);
     assert(extract(4,newBelow.row[0]) == 1);
+    assert(extract(3,newBelow.row[0]) == 0);
+    assert(extract(5,newBelow.row[0]) == 0);
+    assert(extract(4,newBelow.row[1]) == 0);
+
+    assert(extract(1,new.row[0]) == 0);
+    assert(extract(2,new.row[0]) == 0);
+    assert(extract(3,new.row[0]) == 0);
+    assert(extract(4,new.row[0]) == 0);
+    assert(extract(5,new.row[0]) == 0);
+    assert(extract(6,new.row[0]) == 0);
+    assert(extract(7,new.row[0]) == 0);
+    assert(extract(0,new.row[0]) == 0);
+
+
+    new.bottom = 16;
+    newBelow.top = 24;
+    new = iteratePChunk(new);
+    newBelow = iteratePChunk(newBelow);
+
+    assert(extract(1,new.row[0]) == 0);
+    assert(extract(2,new.row[0]) == 0);
+    assert(extract(3,new.row[0]) == 0);
+    assert(extract(4,new.row[0]) == 0);
+    assert(extract(5,new.row[0]) == 0);
+    assert(extract(6,new.row[0]) == 0);
+    assert(extract(7,new.row[0]) == 0);
+    assert(extract(0,new.row[0]) == 0);
+
 }
 
 void testPackedChunkWorker() {

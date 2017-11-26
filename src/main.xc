@@ -260,33 +260,33 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     passInitialState(c_in, fromWorker); 
 
     int closed = 0, count = 0, liveCells = 0, timeElapsed = 0, confirm;
-    bool iterating = true;
-    printf("Terminate at will...\n");
-
     int ledPattern = 5;
+    bool iterating = true, printAllImages = true;
+
+    printf("Terminate at will...\n");
 
     while (1) {
     	while (closed < noOfThreads) {
 
 	    	select {
-                case fromAcc :> confirm:
-                    if (confirm == 1) {
-                        toLEDs <: 8; //red LED
+          case fromAcc :> confirm:
+              if (confirm == 1) {
+                  toLEDs <: 8; //red LED
 
-                        printf("\n-------< STATUS REPORT >-------\n");
-                        printf("Rounds processed:        %d\n", count);
-                        printf("Live cells:              %d\n", liveCells);
-                        printf("Processing time elapsed: %d\n", timeElapsed);
-                        printf("-------------------------------\n\n");
-                    }
+                  printf("\n-------< STATUS REPORT >-------\n");
+                  printf("Rounds processed:        %d\n", count);
+                  printf("Live cells:              %d\n", liveCells);
+                  printf("Processing time elapsed: %d\n", timeElapsed);
+                  printf("-------------------------------\n\n");
+              }
 
-                    int temp;
-                    printf("here\n");
-                    fromAcc :> temp;
-                    printf("hereagain\n");
-                    break; 
+              int temp;
+              printf("here\n");
+              fromAcc :> temp;
+              printf("hereagain\n");
+              break; 
 	    		case fromWorker[int i] :> confirm:
-	    			if (iterating) fromWorker[i] <: true;
+	    			if (iterating && !printAllImages) fromWorker[i] <: true;
 	    			else {
 	    				fromWorker[i] <: false;
 	    				closed++;
@@ -307,7 +307,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 			
 	    }
 
-	    toLEDs <: 2; //Blue when exporting image
+	  toLEDs <: 2; //Blue when exporting image
 		passOutputState(c_out, fromWorker);
 		toLEDs <: 0;    		
 
@@ -441,7 +441,7 @@ int main(void) {
         on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);//thread to coordinate work on image
 
 
-        on tile[0]: test();
+        //on tile[0]: test();
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
     
