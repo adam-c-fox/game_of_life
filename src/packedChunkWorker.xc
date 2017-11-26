@@ -152,7 +152,9 @@ static pChunk iteratePChunk(pChunk c) {
 static void iteratePacked(pChunk array[IMHT/8][(IMWD/noOfThreads)/8]) {
     for (int y = 0; y < IMHT/8; y++) {
         for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
-            array[y][x] = iteratePChunk(array[y][x]);    
+            array[y][x] = iteratePChunk(array[y][x]);
+
+            //printf("x: %d| y: %d| corners: %d\n", x, y, array[y][x].corners);    
         } 
     }
 }
@@ -204,7 +206,7 @@ static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     uchar cornersArray[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
     for (int y = 1; y < IMHT/8 - 1; y++) {
-        for (int x = 1; x < (IMWD/noOfThreads)/8 - 1; x++) {
+        for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
             cornersArray[0] = extract(7, grid[y-1][x].left);
             cornersArray[1] = extract(7, grid[y-1][x].right);
 
@@ -213,6 +215,28 @@ static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 
             grid[y][x].corners = pack(cornersArray);
         }
+    }
+
+    //Top
+    for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
+        cornersArray[0] = extract(7, grid[(IMHT/8)-1][x].left);
+        cornersArray[1] = extract(7, grid[(IMHT/8)-1][x].right);
+
+        cornersArray[2] = extract(0, grid[1][x].right);
+        cornersArray[3] = extract(0, grid[1][x].left);
+
+        grid[0][x].corners = pack(cornersArray);
+    }
+
+    //Bottom
+    for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
+        cornersArray[0] = extract(7, grid[(IMHT/8)-2][x].left);
+        cornersArray[1] = extract(7, grid[(IMHT/8)-2][x].right);
+
+        cornersArray[2] = extract(0, grid[0][x].right);
+        cornersArray[3] = extract(0, grid[0][x].left);
+
+        grid[(IMHT/8)-1][x].corners = pack(cornersArray);
     }
 
 }
