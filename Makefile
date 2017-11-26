@@ -20,7 +20,7 @@ APP_NAME = game_of_life
 XCC_FLAGS = 
 
 # The USED_MODULES variable lists other module used by the application.
-USED_MODULES = lib_i2c lib_logging lib_xassert
+USED_MODULES = lib_i2c lib_logging lib_xassert 
 
 #=============================================================================
 # The following part of the Makefile includes the common build infrastructure
