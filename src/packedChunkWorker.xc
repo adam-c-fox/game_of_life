@@ -5,13 +5,10 @@
 #include "i2c.h"
 #include <assert.h>
 #include <string.h>
+#include "size.h"
 
 typedef unsigned char uchar;      //using uchar as shorthand
 typedef enum { false, true } bool; 
-
-#define  IMHT 16                  //image height
-#define  IMWD 16                  //image width
-#define  noOfThreads 2			  //Our implementation requires that this must be 2^n
 
 
 
