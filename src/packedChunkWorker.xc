@@ -207,11 +207,11 @@ static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 
     for (int y = 1; y < IMHT/8 - 1; y++) {
         for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
-            cornersArray[0] = extract(7, grid[y-1][x].left);
-            cornersArray[1] = extract(7, grid[y-1][x].right);
+            cornersArray[0] = extract(0, grid[y-1][x].bottom);
+            cornersArray[1] = extract(7, grid[y-1][x].bottom);
 
-            cornersArray[2] = extract(0, grid[y+1][x].right);
-            cornersArray[3] = extract(0, grid[y+1][x].left);
+            cornersArray[2] = extract(7, grid[y+1][x].top);
+            cornersArray[3] = extract(0, grid[y+1][x].top);
 
             grid[y][x].corners = pack(cornersArray);
         }
@@ -219,22 +219,22 @@ static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 
     //Top
     for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
-        cornersArray[0] = extract(7, grid[(IMHT/8)-1][x].left);
-        cornersArray[1] = extract(7, grid[(IMHT/8)-1][x].right);
+        cornersArray[0] = extract(7, grid[(IMHT/8)-1][x].bottom);
+        cornersArray[1] = extract(7, grid[(IMHT/8)-1][x].bottom);
 
-        cornersArray[2] = extract(0, grid[1][x].right);
-        cornersArray[3] = extract(0, grid[1][x].left);
+        cornersArray[2] = extract(0, grid[1][x].top);
+        cornersArray[3] = extract(0, grid[1][x].top);
 
         grid[0][x].corners = pack(cornersArray);
     }
 
     //Bottom
     for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
-        cornersArray[0] = extract(7, grid[(IMHT/8)-2][x].left);
-        cornersArray[1] = extract(7, grid[(IMHT/8)-2][x].right);
+        cornersArray[0] = extract(7, grid[(IMHT/8)-2][x].bottom);
+        cornersArray[1] = extract(7, grid[(IMHT/8)-2][x].bottom);
 
-        cornersArray[2] = extract(0, grid[0][x].right);
-        cornersArray[3] = extract(0, grid[0][x].left);
+        cornersArray[2] = extract(0, grid[0][x].top);
+        cornersArray[3] = extract(0, grid[0][x].top);
 
         grid[(IMHT/8)-1][x].corners = pack(cornersArray);
     }
