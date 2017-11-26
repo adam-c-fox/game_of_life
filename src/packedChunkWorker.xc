@@ -113,6 +113,7 @@ static pChunk copyPChunk(pChunk c) {
     pre.right = c.right;
     pre.top = c.top;
     pre.bottom = c.bottom;
+    pre.corners = c.corners;
 
     return pre;
 }
