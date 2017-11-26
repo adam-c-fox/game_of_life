@@ -416,7 +416,7 @@ void orientation(client interface i2c_master_if i2c, chanend toDist) {
 }
 
 void test() {
-    testPackedWorkerChunk();
+    testPackedChunkWorker();
     printf("All tests pass!\n");
 }
 
