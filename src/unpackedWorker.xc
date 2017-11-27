@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <string.h>
 #include "unpackedWorker.h"
-#include "size.h"
+#include "config.h"
 
 typedef unsigned char uchar;      //using uchar as shorthand
 typedef enum { false, true } bool; 

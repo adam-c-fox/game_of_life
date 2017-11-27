@@ -9,7 +9,7 @@
 #include <assert.h>
 #include <string.h>
 #include "packedChunkWorker.h"
-#include "size.h"
+#include "config.h"
 
 typedef unsigned char uchar;      //using uchar as shorthand
 typedef enum { false, true } bool; 

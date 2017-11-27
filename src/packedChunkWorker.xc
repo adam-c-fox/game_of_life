@@ -5,7 +5,7 @@
 #include "i2c.h"
 #include <assert.h>
 #include <string.h>
-#include "size.h"
+#include "config.h"
 #include "packedChunkWorker.h"
 
 typedef unsigned char uchar;      //using uchar as shorthand
