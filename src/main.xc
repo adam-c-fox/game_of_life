@@ -9,11 +9,10 @@
 #include <assert.h>
 #include <string.h>
 #include "packedChunkWorker.h"
-#include "config.h"
+#include "packedColWorker.h"
 #include "unpackedWorker.h"
-
-//typedef unsigned char uchar;      //using uchar as shorthand
-typedef enum { false, true } bool; 
+#include "utility.h"
+#include "config.h"
 
 on tile[0]: port p_scl = XS1_PORT_1E;         //interface ports to orientation
 on tile[0]: port p_sda = XS1_PORT_1F;
@@ -148,7 +147,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     int value = 0;
 
-    while (value != 14) {
+    while (value != 14 && !debugMode) {
        	printf("Proceed with launch?\n");
     	fromButtons :> value;
     }
@@ -344,11 +343,11 @@ int main(void) {
         on tile[0]: showLEDs(leds, c_leds);
     
         on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
-            colWorkerPacked(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+            packedChunkWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
         }
 
         on tile[1]: par (int i = (noOfThreads/2); i < noOfThreads; i++) {
-            colWorkerPacked(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+            packedChunkWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
         }
 
         // on tile[1]: colWorkerPacked(0, dist[0], worker[0], worker[1]);

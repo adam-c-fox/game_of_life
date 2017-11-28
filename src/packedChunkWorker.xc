@@ -6,12 +6,8 @@
 #include <assert.h>
 #include <string.h>
 #include "config.h"
+#include "utility.h"
 #include "packedChunkWorker.h"
-
-//typedef unsigned char uchar;      //using uchar as shorthand
-typedef enum { false, true } bool; 
-
-
 
 struct packedChunk {
     uchar left, right, top, bottom, corners;
@@ -19,13 +15,7 @@ struct packedChunk {
 };
 typedef struct packedChunk pChunk;
 
-uchar pack(uchar cells[8]) {
-    uchar result = 0;
-    for (int i = 0; i < 8; i++) {
-        result = (result << 1) | (cells[i] & 1);
-    }
-    return result;
-}
+
 
 static void unpack(uchar x, uchar cells[8]) {
     for (int i = 0; i < 8; i++) {
@@ -38,7 +28,7 @@ static uchar extract(int n, uchar x) {
     return (x >> (7-n)) & 1;
 }
 
-void drawGrid(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
+static void drawGrid(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     for (int yG = 0; yG < (IMHT/8); yG++) {
 
         //tops
@@ -146,26 +136,9 @@ static uchar sumNeighborsPacked(int x, int y, pChunk c) {
     return sum;
 }
 
-static pChunk copyPChunk(pChunk c) {
-    pChunk pre;
 
-    for (int i = 0; i < 8; i++) {
-       pre.row[i] = c.row[i];
-    }
-
-    pre.left = c.left;
-    pre.right = c.right;
-    pre.top = c.top;
-    pre.bottom = c.bottom;
-    pre.corners = c.corners;
-
-    return pre;
-}
-
-//TODO change struct passing to pass by reference
 static pChunk iteratePChunk(pChunk c) {
     pChunk pre = c;
-    //pChunk output;
 
     for (int y = 0; y < 8; y++) {
         uchar result = 0;
@@ -179,17 +152,8 @@ static pChunk iteratePChunk(pChunk c) {
             else new = 0;
 
             result = (result << 1) | (new & 1);
-
-            // if(extract(x, pre.row[y]) == 1) {
-            //     printf("x: %d | y: %d | n: %d | result: %d\n", x, y, n, result);
-            // }
-            // if(x == 3 && y == 2) {
-            //     printf("x: %d | y: %d | n: %d | result: %d\n", x, y, n, result);
-            // }
         }
-        //printf("result: %d\n", result);
         c.row[y] = result;
-        //output.row[y] = result;
     }
     return c;
 }
@@ -200,12 +164,11 @@ static void iteratePacked(int id, pChunk array[IMHT/8][(IMWD/noOfThreads)/8]) {
     for (int y = 0; y < IMHT/8; y++) {
         for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
             array[y][x] = iteratePChunk(array[y][x]);
-
-            //printf("x: %d| y: %d| corners: %d\n", x, y, array[y][x].corners);    
         } 
     }
 }
 
+//TODO adam's version
 //Read in corresponding segment of world
 static void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 	for (int y = 0; y < IMHT; y++) {
@@ -221,28 +184,29 @@ static void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]
     }
 }
 
+//TODO adam's version
 //Send out corresponding segment of world
 static void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
-    for (int y = 0; y < IMHT; y++) {
-        for (int x = 0; x < IMWD/noOfThreads/8; x++) {
-            uchar buffer[8];
-            unpack(grid[y/8][x].row[y%8], buffer);
-            for (int i = 0; i < 8; i++) {
-                dist <: (uchar) (buffer[i] ? 255 : 0);
-            }
-        }
-    }
-    // for (int y = 0; y < IMHT/8; y++) {
-    //     for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
-    //         for (int j = 0; j < 8; j++) {
-    //             uchar buffer[8];
-    //             unpack(grid[y][x].row[j], buffer); 
-    //             for (int i = 0; i < 8; i++) {
-    //                 dist <: (uchar)(buffer[i] * 255);
-    //             }
-    //         }
-    //     }
-    // }
+    //for (int y = 0; y < IMHT; y++) {
+    //    for (int x = 0; x < IMWD/noOfThreads/8; x++) {
+    //        uchar buffer[8];
+    //        unpack(grid[y/8][x].row[y%8], buffer);
+    //        for (int i = 0; i < 8; i++) {
+    //            dist <: (uchar) (buffer[i] ? 255 : 0);
+    //        }
+    //    }
+    //}
+     for (int y = 0; y < IMHT/8; y++) {
+         for (int j = 0; j < 8; j++) {
+             for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
+                 uchar buffer[8];
+                 unpack(grid[y][x].row[j], buffer); 
+                 for (int i = 0; i < 8; i++) {
+                     dist <: (uchar)(buffer[i] * 255);
+                 }
+             }
+         }
+     }
 }
 
 static uchar getCol(int n, pChunk c) {
@@ -294,61 +258,7 @@ static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 
 // none of this is correct
 static void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
-    // for (int y = 1; y < IMHT/8 - 1; y++) {
-    //     for (int x = 1; x < (IMWD/noOfThreads)/8 - 1; x++) {
-    //         grid[y][x].left = getCol(7, grid[y][x-1]);
-    //         grid[y][x].right = getCol(0, grid[y][x+1]);
-
-    //         // grid[y][x].top = grid[y - 1][x].row[7];
-    //         // grid[y][x].bottom = grid[y + 1][x].row[0];
-    //     }
-    // }
-
-    // for (int y = 1; y < IMHT/8; y++) {
-    //     for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
-    //         grid[y][x].top = grid[y - 1][x].row[7];
-    //     }
-    // }
-
-    // for (int y = 0; y < IMHT/8 - 1; y++) {
-    //     for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
-    //         grid[y][x].bottom = grid[y + 1][x].row[0];     //I suspect these are wrong
-    //     }
-    // }
-
-
-    // // if ((IMWD/noOfThreads)/8 > 1) {
-    // //     int i = 2;
-
-    // //     for (int y = 0; y < (IMHT/8); y++) {
-    // //         grid[y][0].right = getCol(0, grid[y][i-1]);
-    // //         grid[y][(IMWD/noOfThreads)/8-1].left = getCol(7, grid[y][(IMWD/noOfThreads)/8-i]);        
-    // //     }      
-    // // }
-    
-
-
-    // for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
-
-    //     grid[IMHT/8 - 1][x].bottom = grid[0][x].row[0];
-    //     grid[0][x].top = grid[IMHT/8 - 1][x].row[7];
-
-    //     if (x != 0) {
-    //         grid[0][x].left = getCol(7, grid[0][x-1]);
-    //         grid[(IMHT/noOfThreads)/8 - 1][x].left = getCol(7, grid[(IMHT/noOfThreads)/8 - 1][x-1]);
-    //     }              
-    //     if (x != (IMWD/noOfThreads)/8-1) {
-    //         grid[0][x].right = getCol(0, grid[0][x+1]);
-    //         grid[(IMHT/noOfThreads)/8 - 1][x].right = getCol(0, grid[(IMHT/noOfThreads)/8 - 1][x+1]);  
-    //     } 
-    // }
-
-
-
-
-
-    //------------------------------------------------------------------------
-    for (int y = 0; y < IMHT/8; y++) {
+   for (int y = 0; y < IMHT/8; y++) {
         for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
             if (x != 0)                        grid[y][x].left = getCol(7, grid[y][x-1]);
             if (x != ((IMWD/noOfThreads)/8)-1) grid[y][x].right = getCol(0, grid[y][x+1]);
@@ -388,51 +298,36 @@ static void receiveFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_le
     }
 }
 
-void colWorkerPacked(int id, chanend dist_in, chanend c_left, chanend c_right) {
+void packedChunkWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     pChunk grid[IMHT/8][(IMWD/noOfThreads)/8];
     readInPacked(dist_in, grid);    
 
     bool iterating = true;
 
     while (1) {
-    	while (iterating) {
+        while (iterating) {
 
-	        if ((id % 2) == 0) {
-	            passFirst(grid, c_left, c_right);
-	        }
-	        else {
-	            receiveFirst(grid, c_left, c_right);
-	        } 
-
-            if (id == 3) {
-                drawGrid(grid);
-                printf("before\n");   
-            }
+	    if ((id % 2) == 0) {
+	        passFirst(grid, c_left, c_right);
+	    }
+	    else {
+	        receiveFirst(grid, c_left, c_right);
+	    } 
 
             linkChunks(grid);
+            iteratePacked(id, grid);
 
-            if (id == 3) drawGrid(grid);
-
-	        iteratePacked(id, grid);
-
-            if (id == 3) {
-                printf("after\n");
-                drawGrid(grid);   
-                printf("iteration complete.\n");
-            }
-
-	        dist_in <: 1;
-	        dist_in :> iterating;
+            dist_in <: 1;
+	    dist_in :> iterating;
 
     	}	
 
-	    int proceed;
-	    dist_in :> proceed;
+	int proceed;
+	dist_in :> proceed;
 
-	    sendOutPacked(dist_in, grid); 
-	    iterating = true;
+	sendOutPacked(dist_in, grid); 
+	iterating = true;
     }
- 
 }
 
 

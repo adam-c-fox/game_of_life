@@ -7,12 +7,7 @@
 #include <string.h>
 #include "unpackedWorker.h"
 #include "config.h"
-
-typedef unsigned char uchar;      //using uchar as shorthand
-typedef enum { false, true } bool; 
-
-
-
+#include "utility.h"
 
 //Total number of neighbors of a cell
 static uchar sumNeighbors(uchar pre[IMHT][(IMWD/noOfThreads)+2], int x, int y) {
