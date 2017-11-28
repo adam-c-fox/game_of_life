@@ -70,7 +70,7 @@ static void readIn(chanend dist_in, uchar grid[IMHT][IMWD/noOfThreads+2]) {
 }
 
 
-void colWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
+void unpackedWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     int colWidth = (IMWD/noOfThreads); //Adam remember to remove if needed
     uchar grid[IMHT][(IMWD/noOfThreads)+2];
 

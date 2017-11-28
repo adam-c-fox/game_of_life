@@ -184,18 +184,7 @@ static void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]
     }
 }
 
-//TODO adam's version
-//Send out corresponding segment of world
 static void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
-    //for (int y = 0; y < IMHT; y++) {
-    //    for (int x = 0; x < IMWD/noOfThreads/8; x++) {
-    //        uchar buffer[8];
-    //        unpack(grid[y/8][x].row[y%8], buffer);
-    //        for (int i = 0; i < 8; i++) {
-    //            dist <: (uchar) (buffer[i] ? 255 : 0);
-    //        }
-    //    }
-    //}
      for (int y = 0; y < IMHT/8; y++) {
          for (int j = 0; j < 8; j++) {
              for (int x = 0; x < (IMWD/noOfThreads)/8; x++){

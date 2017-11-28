@@ -171,8 +171,8 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     int closed = 0, count = 0, liveCells = 0, confirm, ledPattern = 5;
     bool iterating = true;
     timer t;
-    uint32_t startTime, endTime, timeElapsed;
-    float timeElapsedFloat;
+    uint32_t startTime, endTime, timeElapsed = 0;
+    float timeElapsedFloat = 0;
 
     printf("Terminate at will...\n");
 
@@ -364,7 +364,7 @@ int main(void) {
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
     
-        on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
+        on tile[1]: par (int i = 0; i < (noOfThreads/2); i++) {
             packedChunkWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
         }
 
