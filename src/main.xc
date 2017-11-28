@@ -172,7 +172,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     bool iterating = true;
     timer t;
     uint32_t startTime, endTime, timeElapsed = 0;
-    float timeElapsedFloat = 0;
+    double timeElapsedFloat = 0;
 
     printf("Terminate at will...\n");
 
@@ -180,63 +180,55 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     while (1) {
     	while (closed < noOfThreads) {  
+	    select {
+                case fromAcc :> confirm:
+                    if (confirm == 1) {
+                        toLEDs <: 8; //red LED
 
-	    	select {
-          case fromAcc :> confirm:
-              if (confirm == 1) {
-                  toLEDs <: 8; //red LED
+                        t :> endTime;
+                        timeElapsed += endTime-startTime;
+                        timeElapsedFloat = timeElapsed;
 
-                  t :> endTime;
-                  timeElapsed += endTime-startTime;
-                  timeElapsedFloat = timeElapsed;
+                        printf("\n-------< STATUS REPORT >-------\n");
+                        printf("Rounds processed:        %d\n", count);
+                        printf("Live cells:              %d\n", liveCells);
+                        printf("Processing time elapsed: %lf\n", timeElapsedFloat/100000000);
+                        printf("-------------------------------\n\n");
+                    }
 
-                  printf("\n-------< STATUS REPORT >-------\n");
-                  printf("Rounds processed:        %d\n", count);
-                  printf("Live cells:              %d\n", liveCells);
-                  printf("Processing time elapsed: %lf\n", timeElapsedFloat/100000000);
-                  printf("-------------------------------\n\n");
-              }
+                    int temp;
+                    fromAcc :> temp;
+                    t :> startTime;
+                    break; 
+	        case fromWorker[int i] :> confirm:
+	            if (iterating && !printAllImages) fromWorker[i] <: true;
+                    else {
+	                fromWorker[i] <: false;
+	                closed++;
+	            }
 
-              int temp;
-              fromAcc :> temp;
-              t :> startTime;
-              break; 
-	    		case fromWorker[int i] :> confirm:
-	    			if (iterating && !printAllImages) fromWorker[i] <: true;
-	    			else {
-	    				fromWorker[i] <: false;
-	    				closed++;
-	    			}
+	            if (i == 0) {
+                        toLEDs <: ledPattern;
+                        count++;
+                        if (ledPattern == 5) ledPattern = 1;
+	                else ledPattern = 5;
+	            }
+	            break;
+	        case fromButtons :> confirm:
+	            if (confirm == 13) iterating = false;	
+	            break;	
+	        }
+            }
+            t :> endTime;
+            timeElapsed += endTime-startTime;
 
-	    			if (i == 0) {
-	    				toLEDs <: ledPattern;
-	    				count++;
-
-	    				if (ledPattern == 5) ledPattern = 1;
-	    				else ledPattern = 5;
-	    			}
-	    			break;
-	    		case fromButtons :> confirm:
-	    			if (confirm == 13) iterating = false;	
-	    			break;	
-	    	}
-			
-	    }
-
-      t :> endTime;
-      timeElapsed += endTime-startTime;
-
-  	  toLEDs <: 2; //Blue when exporting image
-  		passOutputState(c_out, fromWorker);
-  		toLEDs <: 0;    		
-
-  		iterating = true;
-  		closed = 0;
-      t :> startTime;
+            toLEDs <: 2; //Blue when exporting image
+            passOutputState(c_out, fromWorker);
+            toLEDs <: 0;    		
+            iterating = true;
+            closed = 0;
+            t :> startTime;
     }
-    
-
-    
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
