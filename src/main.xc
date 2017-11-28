@@ -10,8 +10,9 @@
 #include <string.h>
 #include "packedChunkWorker.h"
 #include "config.h"
+#include "unpackedWorker.h"
 
-typedef unsigned char uchar;      //using uchar as shorthand
+//typedef unsigned char uchar;      //using uchar as shorthand
 typedef enum { false, true } bool; 
 
 on tile[0]: port p_scl = XS1_PORT_1E;         //interface ports to orientation
@@ -43,6 +44,10 @@ int showLEDs(out port p, chanend fromDistributor) {
     p <: pattern;                //send pattern to LED port
   }
   return 0;
+}
+
+int led(int b3 ) {
+
 }
 
 //READ BUTTONS and send button pattern to userAnt
@@ -115,6 +120,7 @@ void passInitialState(chanend c_in, chanend fromWorker[noOfThreads]) {
 }
 
 //Collects in results from workers and sends to output
+// TODO FIX THIS: UNPACK AFTER THIS POINT
 void passOutputState(chanend c_out, chanend fromWorker[noOfThreads]) {
     printf("Button press confirmed, saving image...\n");
 
@@ -199,12 +205,12 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 			
 	    }
 
-	  toLEDs <: 2; //Blue when exporting image
-		passOutputState(c_out, fromWorker);
-		toLEDs <: 0;    		
+  	  toLEDs <: 2; //Blue when exporting image
+  		passOutputState(c_out, fromWorker);
+  		toLEDs <: 0;    		
 
-		iterating = true;
-		closed = 0;
+  		iterating = true;
+  		closed = 0;
 
     }
     
@@ -328,8 +334,8 @@ int main(void) {
     par {
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing orientation data
         on tile[0]: orientation(i2c[0],c_control);        //client thread reading orientation data
-        on tile[1]: DataInStream("test.pgm", c_inIO);          //thread to read in a PGM image
-        on tile[1]: DataOutStream("testout", c_outIO);       //thread to write out a PGM image
+        on tile[1]: DataInStream(INPUT, c_inIO);          //thread to read in a PGM image
+        on tile[1]: DataOutStream(OUTPUT, c_outIO);       //thread to write out a PGM image
         on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);//thread to coordinate work on image
 
 
@@ -337,16 +343,16 @@ int main(void) {
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
     
-        // on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
-        //     colWorkerPacked(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
-        // }
+        on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
+            colWorkerPacked(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+        }
 
-        // on tile[1]: par (int i = 4; i < noOfThreads; i++) {
-        //     colWorkerPacked(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
-        // }
+        on tile[1]: par (int i = (noOfThreads/2); i < noOfThreads; i++) {
+            colWorkerPacked(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+        }
 
-        on tile[1]: colWorkerPacked(0, dist[0], worker[0], worker[1]);
-        on tile[1]: colWorkerPacked(1, dist[1], worker[1], worker[0]);
+        // on tile[1]: colWorkerPacked(0, dist[0], worker[0], worker[1]);
+        // on tile[1]: colWorkerPacked(1, dist[1], worker[1], worker[0]);
     }
 
     return 0;
