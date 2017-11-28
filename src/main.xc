@@ -14,6 +14,7 @@
 #include "utility.h"
 #include "config.h"
 
+
 on tile[0]: port p_scl = XS1_PORT_1E;         //interface ports to orientation
 on tile[0]: port p_sda = XS1_PORT_1F;
 on tile[0] : in port buttons = XS1_PORT_4E; //port to access xCore-200 buttons
@@ -69,14 +70,29 @@ void buttonListener(in port b, chanend toDistributor) {
 
 void DataInStream(char infname[], chanend c_out) {
   int res;
-  uchar line[IMWD];
-  //printf("DataInStream: Start...\n");
+  uchar line[IMWD], temp;
 
-  //Open PGM file
-  res = _openinpgm(infname, IMWD, IMHT);
-  if (res) {
-    printf("DataInStream: Error openening %s\n.", infname);
-    return;
+  if (!generateOnBoard) {
+    res = _openinpgm(infname, IMWD, IMHT);
+    if (res) {
+      printf("DataInStream: Error openening %s\n.", infname);
+      return;
+    }
+
+    for (int y = 0; y < IMHT; y++) {
+      _readinline(line, IMWD);
+      for (int x = 0; x < IMWD; x++) {
+        c_out <: line[x];
+      }
+    }
+  }
+  else {
+    for (int y = 0; y < IMHT; y++) {
+      for (int x = 0; x < IMWD; x++) {
+        temp = rand()%2;
+        c_out <: temp;
+      }
+    }
   }
 
   //Read image line-by-line and send byte by byte to channel c_out
@@ -84,14 +100,12 @@ void DataInStream(char infname[], chanend c_out) {
     _readinline(line, IMWD);
     for (int x = 0; x < IMWD; x++) {
       c_out <: line[x];
-      //printf("-%4.1d ", line[x]); //show image values
+      temp = rand()%2;
+      c_out <: temp;
     }
-    //printf("\n");
   }
 
-  //Close PGM image file
   _closeinpgm();
-  //printf("DataInStream: Done...\n");
   return;
 }
 
@@ -105,13 +119,13 @@ void DataInStream(char infname[], chanend c_out) {
 //Reads in image and passes to the correct worker
 void passInitialState(chanend c_in, chanend fromWorker[noOfThreads]) {
     printf("Reading in image...\n");
-
+    
     uchar temp;
     for (int y = 0; y < IMHT; y++) {  
         for (int n = 0; n < noOfThreads; n++) {
             for (int x = 0; x < (IMWD/noOfThreads); x++) { 
-	        c_in :> temp;
-            fromWorker[n] <: temp;                    
+	            c_in :> temp;
+              fromWorker[n] <: temp;                    
             }
         }
     }
@@ -131,8 +145,6 @@ void passOutputState(chanend c_out, chanend fromWorker[noOfThreads]) {
     for (int y = 0; y < IMHT; y++) {
         for (int n = 0; n < noOfThreads; n++) {
             for (int x = 0; x < (IMWD/noOfThreads); x++) { 
-            	//printf("passOutputState_here\n");
-
                 fromWorker[n] :> temp;                    
                 c_out <: temp;
             }
