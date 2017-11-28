@@ -365,12 +365,12 @@ int main(void) {
         on tile[1]: DataOutStream(OUTPUT, c_outIO);   
         on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);
 
-        on tile[0]: if (debugMode) test();
+        //on tile[0]: if (debugMode) test();
 
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
     
-        on tile[1]: par (int i = 0; i < (noOfThreads/2); i++) {
+        on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
             packedChunkWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
         }
 
