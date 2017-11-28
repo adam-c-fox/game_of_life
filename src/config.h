@@ -8,5 +8,6 @@
 #define  noOfThreads 4			  //Our implementation requires that this must be 2^n
 #define  debugMode 1
 #define  generateOnBoard 0		//If true, will ignore input name
+#define  printAllImages 0
 
 

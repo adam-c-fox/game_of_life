@@ -168,31 +168,38 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     passInitialState(c_in, fromWorker); 
 
-    int closed = 0, count = 0, liveCells = 0, timeElapsed = 0, confirm;
-    int ledPattern = 5;
-    bool iterating = true, printAllImages = true;
+    int closed = 0, count = 0, liveCells = 0, confirm, ledPattern = 5;
+    bool iterating = true;
+    timer t;
+    uint32_t startTime, endTime, timeElapsed;
+    float timeElapsedFloat;
 
     printf("Terminate at will...\n");
 
+    t :> startTime;
+
     while (1) {
-    	while (closed < noOfThreads) {
+    	while (closed < noOfThreads) {  
 
 	    	select {
           case fromAcc :> confirm:
               if (confirm == 1) {
                   toLEDs <: 8; //red LED
 
+                  t :> endTime;
+                  timeElapsed += endTime-startTime;
+                  timeElapsedFloat = timeElapsed;
+
                   printf("\n-------< STATUS REPORT >-------\n");
                   printf("Rounds processed:        %d\n", count);
                   printf("Live cells:              %d\n", liveCells);
-                  printf("Processing time elapsed: %d\n", timeElapsed);
+                  printf("Processing time elapsed: %lf\n", timeElapsedFloat/100000000);
                   printf("-------------------------------\n\n");
               }
 
               int temp;
-              printf("here\n");
               fromAcc :> temp;
-              printf("hereagain\n");
+              t :> startTime;
               break; 
 	    		case fromWorker[int i] :> confirm:
 	    			if (iterating && !printAllImages) fromWorker[i] <: true;
@@ -216,13 +223,16 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 			
 	    }
 
+      t :> endTime;
+      timeElapsed += endTime-startTime;
+
   	  toLEDs <: 2; //Blue when exporting image
   		passOutputState(c_out, fromWorker);
   		toLEDs <: 0;    		
 
   		iterating = true;
   		closed = 0;
-
+      t :> startTime;
     }
     
 
