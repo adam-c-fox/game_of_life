@@ -168,7 +168,6 @@ static void iteratePacked(int id, pChunk array[IMHT/8][(IMWD/noOfThreads)/8]) {
     }
 }
 
-//TODO adam's version
 //Read in corresponding segment of world
 static void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 	for (int y = 0; y < IMHT; y++) {
@@ -269,7 +268,7 @@ static void passFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left,
     int last = (IMWD/noOfThreads)/8 - 1;
     for (int y = 0; y < IMHT/8; y++) {
         c_left  <: getCol(0, grid[y][0]);
-		c_right :> grid[y][last].right;        
+	c_right :> grid[y][last].right;        
 
         c_right <: getCol(7, grid[y][last]);
         c_left  :> grid[y][0].left;        
@@ -285,6 +284,17 @@ static void receiveFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_le
         c_left  :> grid[y][0].left;
         c_right <: getCol(7, grid[y][last]);
     }
+}
+
+//Counts the number of live cells stored by this worker
+int sumLive(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
+    int sum = 0;
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
+            if (extract(x % 8, grid[y/8][x/8].row[y % 8])) sum++;
+        }
+    }
+    return sum;
 }
 
 void packedChunkWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
@@ -305,11 +315,13 @@ void packedChunkWorker(int id, chanend dist_in, chanend c_left, chanend c_right)
 
             linkChunks(grid);
             iteratePacked(id, grid);
-
+            
             dist_in <: 1;
 	    dist_in :> iterating;
 
     	}	
+        
+        dist_in <: sumLive(grid);
 
 	int proceed;
 	dist_in :> proceed;

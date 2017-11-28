@@ -46,8 +46,13 @@ int showLEDs(out port p, chanend fromDistributor) {
   return 0;
 }
 
-int led(int b3 ) {
-
+int led(int red, int green, int blue, int greenSeperate) {
+    uchar result = 0;
+    result = (result << 0) | (greenSeperate & 1);
+    result = (result << 1) | (blue & 1);
+    result = (result << 2) | (green & 1);
+    result = (result << 3) | (red & 1);
+    return result;
 }
 
 //READ BUTTONS and send button pattern to userAnt
@@ -133,7 +138,6 @@ void passInitialState(chanend c_in, chanend fromWorker[noOfThreads]) {
 }
 
 //Collects in results from workers and sends to output
-// TODO FIX THIS: UNPACK AFTER THIS POINT
 void passOutputState(chanend c_out, chanend fromWorker[noOfThreads]) {
     printf("Button press confirmed, saving image...\n");
 
@@ -153,22 +157,37 @@ void passOutputState(chanend c_out, chanend fromWorker[noOfThreads]) {
 
 }
 
-//SORT OUT INDENTATION, IT'S SCREWED.
+void statusReport(int rounds, int liveCells, double timeElapsedFloat) {
+    printf("\n-------< STATUS REPORT >-------\n");
+    printf("Rounds processed:        %d\n", rounds);
+    printf("Live cells:              %d\n", liveCells);
+    printf("Processing time elapsed: %lf\n", timeElapsedFloat/100000000);
+    printf("-------------------------------\n\n");
+}
+
+int sum(int threadCells[noOfThreads]) {
+    int sum = 0;
+    for (int i = 0; i < noOfThreads; i++) {
+        sum += threadCells[i];
+    }
+    return sum;
+}
+
 void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons, chanend toLEDs) {
     printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
 
-    int value = 0;
-
-    while (value != 14 && !debugMode) {
+    int buttonInput = 0;
+    while (buttonInput != 14 && !debugMode) {
        	printf("Proceed with launch?\n");
-    	fromButtons :> value;
+    	fromButtons :> buttonInput;
     }
     
-    toLEDs <: 1;
+    toLEDs <: led(0, 0, 0, 1);
 
     passInitialState(c_in, fromWorker); 
 
-    int closed = 0, count = 0, liveCells = 0, confirm, ledPattern = 5;
+    int closed = 0, rounds = 0, liveCells = 0, confirm, ledPattern = led(0, 1, 0, 0);
+    int threadCells[noOfThreads];
     bool iterating = true;
     timer t;
     uint32_t startTime, endTime, timeElapsed = 0;
@@ -183,37 +202,35 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 	    select {
                 case fromAcc :> confirm:
                     if (confirm == 1) {
-                        toLEDs <: 8; //red LED
+                        toLEDs <: led(1, 0, 0, 0); //Red LED when paused
 
                         t :> endTime;
                         timeElapsed += endTime-startTime;
                         timeElapsedFloat = timeElapsed;
+                        int liveCells = sum(threadCells);
 
-                        printf("\n-------< STATUS REPORT >-------\n");
-                        printf("Rounds processed:        %d\n", count);
-                        printf("Live cells:              %d\n", liveCells);
-                        printf("Processing time elapsed: %lf\n", timeElapsedFloat/100000000);
-                        printf("-------------------------------\n\n");
+                        statusReport(rounds, liveCells, timeElapsedFloat);
                     }
 
-                    int temp;
-                    fromAcc :> temp;
+                    fromAcc :> int continueSignal;
                     t :> startTime;
                     break; 
+
 	        case fromWorker[int i] :> confirm:
 	            if (iterating && !printAllImages) fromWorker[i] <: true;
                     else {
 	                fromWorker[i] <: false;
+                        fromWorker[i] :> threadCells[i];
 	                closed++;
 	            }
 
 	            if (i == 0) {
                         toLEDs <: ledPattern;
-                        count++;
-                        if (ledPattern == 5) ledPattern = 1;
-	                else ledPattern = 5;
+                        rounds++;
+                        ledPattern = (ledPattern == led(0, 1, 0, 1)) ? led(0, 0, 0, 1) : led(0, 1, 0, 1);
 	            }
 	            break;
+
 	        case fromButtons :> confirm:
 	            if (confirm == 13) iterating = false;	
 	            break;	
@@ -222,9 +239,9 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
             t :> endTime;
             timeElapsed += endTime-startTime;
 
-            toLEDs <: 2; //Blue when exporting image
+            toLEDs <: led(0, 0, 1, 0); //Blue LED when exporting image
             passOutputState(c_out, fromWorker);
-            toLEDs <: 0;    		
+            toLEDs <: led(0, 0, 0, 0);    		
             iterating = true;
             closed = 0;
             t :> startTime;
