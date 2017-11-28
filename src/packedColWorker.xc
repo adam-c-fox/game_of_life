@@ -116,6 +116,63 @@ static uchar extract(int n, uchar x) {
 //    }
 //}
 
+//Total number of neighbors of a cell
+static uchar sumNeighbors(int x, int y, uchar pre[IMHT][(IMWD/noOfThreads)/8], uchar left[IMHT/8], uchar right[IMHT/8]) {
+    int sum = 0;
+    int x_min = -1;
+    int x_max = 1;
+    int y_min = -1;
+    int y_max = 1;
+    if (x <= 0) x_min = 0;
+    if (x >= (IMWD/noOfThreads)/8 - 1) x_max = 0;
+    if (y <= 0) x_min = 0;
+    if (y >= IMHT/8 - 1) x_max = 0;
+
+    for (int a = x_min; a <= x_max; a++) {
+        for (int b = y_min; b <= y_max; b++) {
+            if (x + a >= 0 && y + b >= 0) {
+                if (a != 0 || b != 0) sum += extract((x + a) % 8, pre[(y + b)%IMHT][(x + a)/8]);
+            }
+            else {
+                if (x + a < 0 && y + b > 0) sum += extract(7, pre[(y + b)%IMHT][(IMWD/noOfThreads)/8 - 1]);
+                if (x + a > 0 && y + b < 0) sum += extract((x + a) % 8, pre[IMHT - 1][(x + a)/8]);
+                if (x + a < 0 && y + b < 0) sum += extract(7, pre[IMHT - 1][(IMWD/noOfThreads)/8 - 1]);
+            }
+        }
+    }
+    
+    return sum;
+}
+
+//Iterate an array section
+static void iterate(uchar grid[IMHT][(IMWD/noOfThreads)/8], uchar left[IMHT/8], uchar right[IMHT/8]) {
+    uchar pre[IMHT][(IMWD/noOfThreads)/8];
+
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
+            pre[y][x] = grid[y][x];
+        }
+    }
+    
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 1; x < (IMWD/noOfThreads)/8; x++) {
+            uchar result = 0;
+            for (int i = 0; i < 8; i++) {
+                uchar n = sumNeighbors(x, y, pre, left, right);
+                uchar new = 0;
+
+                if (n < 2) new = 0;
+                else if (n == 2) new = extract(x%8, grid[y][x/8]); 
+                else if (n == 3) new = 1;
+                else new = 0;
+                
+                result = (result << 1) | (new & 1);
+            }
+            grid[y][x/8] = result;
+        }
+    }
+}
+
 //TODO adam's version
 //Read in corresponding segment of world
 static void readInPacked(chanend dist, uchar grid[IMHT][(IMWD/noOfThreads)/8]) {
@@ -134,28 +191,28 @@ static void readInPacked(chanend dist, uchar grid[IMHT][(IMWD/noOfThreads)/8]) {
 
 //TODO adam's version
 //Send out corresponding segment of world
-//static void sendOutPacked(chanend dist, uchar grid[IMHT/8][(IMWD/noOfThreads)/8]) {
-//    //for (int y = 0; y < IMHT; y++) {
-//    //    for (int x = 0; x < IMWD/noOfThreads/8; x++) {
-//    //        uchar buffer[8];
-//    //        unpack(grid[y/8][x].row[y%8], buffer);
-//    //        for (int i = 0; i < 8; i++) {
-//    //            dist <: (uchar) (buffer[i] ? 255 : 0);
-//    //        }
-//    //    }
-//    //}
-//     for (int y = 0; y < IMHT/8; y++) {
-//         for (int j = 0; j < 8; j++) {
-//             for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
-//                 uchar buffer[8];
-//                 unpack(grid[y][x].row[j], buffer); 
-//                 for (int i = 0; i < 8; i++) {
-//                     dist <: (uchar)(buffer[i] * 255);
-//                 }
-//             }
-//         }
-//     }
-//}
+static void sendOutPacked(chanend dist, uchar grid[IMHT][(IMWD/noOfThreads)/8]) {
+    //for (int y = 0; y < IMHT; y++) {
+    //    for (int x = 0; x < IMWD/noOfThreads/8; x++) {
+    //        uchar buffer[8];
+    //        unpack(grid[y/8][x].row[y%8], buffer);
+    //        for (int i = 0; i < 8; i++) {
+    //            dist <: (uchar) (buffer[i] ? 255 : 0);
+    //        }
+    //    }
+    //}
+     for (int y = 0; y < IMHT/8; y++) {
+         for (int j = 0; j < 8; j++) {
+             for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
+                 uchar buffer[8];
+                 unpack(grid[y][x], buffer); 
+                 for (int i = 0; i < 8; i++) {
+                     dist <: (uchar)(buffer[i] * 255);
+                 }
+             }
+         }
+     }
+}
 
 static uchar getCol(int x, int y, uchar grid[IMHT][(IMWD/noOfThreads)/8]) {
     uchar result = 0;
@@ -177,7 +234,6 @@ static void passFirst(uchar grid[IMHT][(IMWD/noOfThreads)/8], uchar left[IMHT/8]
 }
 
 static void receiveFirst(uchar grid[IMHT][(IMWD/noOfThreads)/8], uchar left[IMHT/8],  uchar right[IMHT/8],  chanend c_left, chanend c_right) {
-    int last = (IMWD/noOfThreads)/8 - 1;
     for (int y = 0; y < IMHT/8; y++) {
     	c_right :> right[y];
         c_left  <: getCol(0, y * 8, grid);
@@ -205,7 +261,7 @@ void packedColWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
 	        receiveFirst(grid, left, right, c_left, c_right);
 	    } 
 
-            //iteratePacked(id, grid);
+            iterate(grid, left, right);
 
             dist_in <: 1;
 	    dist_in :> iterating;
@@ -215,7 +271,7 @@ void packedColWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
 	int proceed;
 	dist_in :> proceed;
 
-	//sendOutPacked(dist_in, grid); 
+	sendOutPacked(dist_in, grid); 
 	iterating = true;
     }
 }
