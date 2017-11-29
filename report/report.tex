@@ -22,25 +22,29 @@
 \maketitle
 
 \section{Functionality \& Design}
-Our xCore-200 eXplorerKIT implementation of the John Horton Conway's Game-of-Life correctly implements the following functionality:
+The xCore-200 eXplorerKIT implementation of John Horton Conway's Game-of-Life implements the following functionality:
 
 \begin{itemize}
 \setlength\itemsep{-2mm}
 	\item Correctly evolving Game-of-Life, according to the given rules
-	\item Multiple worker threads for evolution
-	\item Button, Board orientation and LED behaviour
+	\item 2, 4 or 8 worker threads
+	\item Button, board orientation and LED behaviour
 	\item Ability to process larger than 512x512 images
 	\item Memory on both tiles
 	\item Timers to measure processing speed
 	\item Comprehensive unit testing
-	\item Ability to generate random images up to 1344x1344 on the board
+	\item Ability to generate \& process random images up to a size of 1472x1472 on the board
 \end{itemize}
 
-In order to maximise the speed and memory efficiency of our implementation we split the incoming image up across a number of threads, either 2,4 or 8. Each of these threads receives an equal column of the total image. e.g. with a 64x64 image and 2 threads, each thread receives at 32x64 portion of the image.
+\subsection{Method}
+
+
 \vspace{-4mm}
 
 \subsection{Worker Types}
 \vspace{-2mm}
+In order to maximise the speed and memory efficiency of our implementation we split the incoming image up across the threads. Each of these threads receives an equal column of the total image. e.g. with a 64x64 image and 2 threads, each thread receives at 32x64 portion of the image.
+
 We then have a few differing worker implementations each with their own benefits and drawbacks:
 \vspace{-8mm}
 
