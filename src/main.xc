@@ -278,12 +278,13 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     int threadCells[noOfThreads];
     bool iterating = true, reporting = false;
     timer t;
-    uint32_t startTime, endTime, timeElapsed = 0;
+    uint32_t startTime, endTime, timeElapsed = 0, prevTime, timeCheck, timeElapsedTemp;
     double timeElapsedFloat = 0;
 
     printf("Terminate at will...\n");
 
     t :> startTime;
+    timeCheck = startTime;
 
     while (1) {
     	while (closed < noOfThreads) {  
@@ -306,6 +307,26 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 	            if (i == 0) {
                         toLEDs <: ledPattern;
                         rounds++;
+
+                        prevTime = timeCheck;
+                        t :> timeCheck;
+                        if (timeCheck < prevTime) {
+                            timeElapsedTemp = prevTime-startTime;
+                            timeElapsedFloat += timeElapsedTemp;
+
+                            t :> startTime;
+                        }
+
+
+                        if (rounds == 100) {
+                            t :> endTime;
+
+                            timeElapsed += endTime-startTime;
+                            timeElapsedFloat += timeElapsed;
+
+                            printf("100 round time: %lf\n", timeElapsedFloat/100000000);
+                        }
+
                         ledPattern = (ledPattern == led(0, 1, 0, 1)) ? led(0, 0, 0, 0) : led(0, 1, 0, 1);
 	            }
 	            break;
@@ -352,6 +373,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     }
 }
 
+void worker(int id, chanend dist_in, chanend c_left, chanend c_right) {
+    if (IMHT <= 256 || IMWD <= 256) unpackedWorker(id, dist_in, c_left, c_right);
+    else packedChunkWorker(id, dist_in, c_left, c_right);
+}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -371,26 +397,26 @@ int main(void) {
     chan c_inIO, c_outIO, c_control;
     chan c_buttons, c_leds;
 
-    chan worker[noOfThreads], dist[noOfThreads];
+    chan workerChan[noOfThreads], dist[noOfThreads];
     
     par {
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);
         on tile[0]: orientation(i2c[0],c_control);      
-        on tile[1]: DataInStream(INPUT, c_inIO);       
-        on tile[1]: DataOutStream(OUTPUT, c_outIO);   
-        on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);
+        on tile[0]: DataInStream(INPUT, c_inIO);       
+        on tile[0]: DataOutStream(OUTPUT, c_outIO);   
+        on tile[0]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);
 
         //on tile[0]: if (debugMode) test();
 
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
     
-        on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
-            packedChunkWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+        on tile[1]: par (int i = 0; i < (noOfThreads/2); i++) {
+            worker(i, dist[i], workerChan[i], workerChan[(i+1)%noOfThreads]);
         }
 
         on tile[1]: par (int i = (noOfThreads/2); i < noOfThreads; i++) {
-            packedChunkWorker(i, dist[i], worker[i], worker[(i+1)%noOfThreads]);
+            worker(i, dist[i], workerChan[i], workerChan[(i+1)%noOfThreads]);
         }
 
     }
