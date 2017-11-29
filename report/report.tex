@@ -103,7 +103,19 @@ Packing into an unsigned char (uchar) we can store 8 values in each, drastically
 
 \pagebreak
 \section{Critical Analysis}
-Through testing, it was determined that the additional time complexity of packing and unpacking meant that the
+With the -O3 compiler flag and correctly distributed functions across two tiles, the program can achieve a maximum image size of 1472 x 1472. The fastest it can iterate a 16x16 image is with two threads at approximately 2700 rounds per second.
+
+It was initially expected that the packedChunkWorker would be the fastest implementation for all but the smallest images. Through benchmarking, it was determined that the additional time complexity of packing and unpacking, and inter-chunk edge sharing, meant that the packedChunkWorker was slower than the unpackedWorker. Implementing the dynamic selection of the worker function based on file size means that the program uses the fastest available and will use the unpacked version up to file sizes less than or equal to 256 x 256.
+
+Another dynamic improvement that could be made, which XC does not currently allow (but should), is the ability to decide which tiles the functions will run on dynamically. Currently, the program will run half of the worker threads on tile 0 and half on tile 1, which means two threads will have to communicate cross tile. This is required by our implementation in order to make use of the memory on both tiles for larger images, however, is slower for images where this is not required. As cross-tile communication is much slower than intra-tile, it would be advantageous to place all the threads on the same tile, in the case that image is less than or equal to a 256 square; which is known at compile time.
+
+The memory usuage of packedChunkWorker, and thus the maximum image size, could be greatly improved by packing into ints or longs, rather than uchar. This is because it currently requires 5 extra bytes for every 64 grid bits stored, but by packing into an int, it would require only 5 per 1024 while still not needing to copy the entire grid for iteration.
+
+Another improvement that could be made would be to create a third dynamic worker, which iterated in smaller packed columns rather than chunks. This would not be as memory efficient, but would be linear complexity on size of image for sharing between sections, as opposed to squared complexity for chunks.
+
+It may have been faster, for some medium sized images, to only pack the communication between threads and store unpacked values. This would greatly reduce the channel communication overhead between sharing threads at the start of an iteration, but still remain fast for the summation calculations. However as it has not been implemented or benchmarked, it is unclear whether the packing overhead would have negated any performance benefits for images of that size.
+
+The program is limited in how the number of threads must be a power of 2. This means that it was not possible to test 10 threads. The input size is also quite limiting, as it must be a multiple of the number of threads (a multiple of the number of threads * 8 for larger than 256). However, implementing these changes would greatly increase the complexity of the code, and potentially decrease efficiency.
 
 
 
