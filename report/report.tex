@@ -29,44 +29,36 @@ The xCore-200 eXplorerKIT implementation of John Horton Conway's Game-of-Life im
 	\item Correctly evolving Game-of-Life, according to the given rules
 	\item 2, 4 or 8 worker threads
 	\item Button, board orientation and LED behaviour
-	\item Ability to process larger than 512x512 images
-	\item Memory on both tiles
-	\item Timers to measure processing speed
-	\item Comprehensive unit testing
+	\item Ability to process larger than 512x512 images with memory on both tiles
+	\item Timers to measure processing speed and comprehensive unit testing
 	\item Ability to generate \& process random images up to a size of 1472x1472 on the board
+        \item Dynamically chooses implementation based on input size
 \end{itemize}
 
+\vspace{-4mm}
 \subsection{Method}
+\vspace{-2mm}
+In order to iterate the game of life, the program works as follows: The main function starts up all threads, specifies which tiles they are on, and assigns channels between them. The distributor function is responsible for the mechanics such as LED behavoiur, accelerometer pausing and telling the workers to input and output the current game state. To minimise thread communication, the workers pass board state directly to the IO threads when required and only communicate with the distributor to send a confirmation signal each round and to send the count of live cells when the game is paused. The workers remain in sync as they require synchronous communication to share columns each round.
 
 
 \vspace{-4mm}
 
 \subsection{Worker Types}
 \vspace{-2mm}
-In order to maximise the speed and memory efficiency of our implementation we split the incoming image up across the threads. Each of these threads receives an equal column of the total image. e.g. with a 64x64 image and 2 threads, each thread receives at 32x64 portion of the image.
+Each of the worker threads receives an equal column of the total image. There are two different worker systems, the program dynamically chooses the best implementation based on the size of the input image:
 
-We then have a few differing worker implementations each with their own benefits and drawbacks:
-\vspace{-8mm}
-
+\vspace{-4mm}
 \subsubsection{Unpacked Worker}
-This was the first worker we implemented, and is therefore the simplest. It reads in the segment of the image it is passed, before passing the leftmost column to the thread on its left and vice versa for the right column, in order to correctly calculate the number of neighbours a cell has. Having been passed a channel to these two. It will then continue iterating and communicating with the adjacent threads until told to send it's current state back to the Distributor function in main.xc.
-\vspace{-2mm}
+\vspace{-3mm}
 
+This worker reads in the segment of the image it is passed from the IO stream and stores it in a uchar array, where each element can be 1 or 0 and represents an alive or dead cell respectively, with an extra column on each side to store the state of left and right workers outmost columns. The threads communicate in pairs, passing or recieving first depending on whether they have an odd or even ID. They then proceed to make a copy of the array, and then iterate on the original based on the sum of the neighbours of each square, the added columns in the array from each worker meaning that the solution requires no further communication until the next round. It will then continue iterating and communicating with the adjacent threads until told to perform one of the IO actions by the distributor.
+
+\vspace{-4mm}
 \subsubsection{Packed Chunk Worker}
-As the name suggests, this worker differs in two main ways from the one above: we use bit packing to reduce the size, and we split the image up even further into chunks. We define a 'packedChunk' as:
+\vspace{-3mm}
 
-    \begin{lstlisting}[language=C]
-    struct packedChunk {
-    	uchar left, right, top, bottom, corners;
-        uchar row[8];
-    };
-    \end{lstlisting}
-    
-Packing into an unsigned char (uchar) we can store 8 values in each, drastically reducing the memory required. The one-dimensional array \emph{row} stores 8 rows of 8 values, thus storing 64 values per chunk. The \emph{left, right, top, bottom} variables, hold the corresponding row of the neighbouring chunk, e.g. left stores the rightmost column of the chunk to the left. Additionally, we use the 4 least significant bits in \emph{corners} to store the 4 adjacent corners.
-
-\subsubsection{Packed Column Worker}
-Our final worker is the amalgam of the previous two. Utilising the bit packing functions created for \emph{Packed Chunk Worker} and the column passing paradigm of \emph{Unpacked Worker}. 
-
+This implementation uses bit packing, and splitting the image up into chunks, to make it optimal for reducing memory usage, allowing for large images.
+Packing into an unsigned char (uchar) we can store 8 values in each, drastically reducing the memory required but adding computational complexity by computing the packing and unpacking, and the copying of edges between chunks each round. The \emph{left, right, top, bottom} variables, hold the corresponding row of the neighbouring chunk and the 4 least significant bits in \emph{corners} to store the 4 adjacent corners. The storing of the neighbours for each chunk rather than the whole array means that the base array takes up more space, however only one chunk needs to be loaded into memory when iterating, rather than making a copy of the entire worker's array.
 
 
 \newgeometry{top=20mm,left=20mm,right=20mm,bottom=20mm} 
@@ -111,6 +103,8 @@ Our final worker is the amalgam of the previous two. Utilising the bit packing f
 
 \pagebreak
 \section{Critical Analysis}
+Through testing, it was determined that the additional time complexity of packing and unpacking meant that the
+
 
 
 \bibliographystyle{unsrt}
