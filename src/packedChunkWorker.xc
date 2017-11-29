@@ -290,7 +290,7 @@ static void receiveFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_le
 int sumLive(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     int sum = 0;
     for (int y = 0; y < IMHT; y++) {
-        for (int x = 0; x < (IMWD/noOfThreads)/8; x++){
+        for (int x = 0; x < (IMWD/noOfThreads); x++){
             if (extract(x % 8, grid[y/8][x/8].row[y % 8])) sum++;
         }
     }
@@ -321,12 +321,15 @@ void packedChunkWorker(int id, chanend dist_in, chanend c_left, chanend c_right)
 
     	}	
         
-        dist_in <: sumLive(grid);
+    dist_in <: sumLive(grid);
 
 	int proceed;
 	dist_in :> proceed;
 
-	sendOutPacked(dist_in, grid); 
+    if (proceed == 1){
+        sendOutPacked(dist_in, grid); 
+    }
+
 	iterating = true;
     }
 }

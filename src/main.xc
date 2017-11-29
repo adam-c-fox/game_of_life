@@ -52,11 +52,10 @@ int showLEDs(out port p, chanend fromDistributor) {
 
 //Bit packs instructions for LED colours
 int led(int red, int green, int blue, int greenSeperate) {
-    uchar result = 0;
-    result = (result << 0) | (greenSeperate & 1);
-    result = (result << 1) | (blue & 1);
-    result = (result << 2) | (green & 1);
-    result = (result << 3) | (red & 1);
+    int result = 0;
+
+    uchar buffer[8] = {0, 0, 0, 0, red, green, blue, greenSeperate};
+    result = pack(buffer);
     return result;
 }
 
@@ -275,9 +274,9 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     passInitialState(c_in, fromWorker); 
 
-    int closed = 0, rounds = 0, liveCells = 0, confirm, ledPattern = led(0, 1, 0, 0);
+    int closed = 0, rounds = 0, liveCells = 0, confirm = 0, ledPattern = led(0, 1, 0, 1);
     int threadCells[noOfThreads];
-    bool iterating = true;
+    bool iterating = true, reporting = false;
     timer t;
     uint32_t startTime, endTime, timeElapsed = 0;
     double timeElapsedFloat = 0;
@@ -291,32 +290,23 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 	    select {
                 case fromAcc :> confirm:
                     if (confirm == 1) {
-                        toLEDs <: led(1, 0, 0, 0); //Red LED when paused
-
-                        t :> endTime;
-                        timeElapsed += endTime-startTime;
-                        timeElapsedFloat = timeElapsed;
-                        int liveCells = sum(threadCells);
-
-                        statusReport(rounds, liveCells, timeElapsedFloat);
+                        iterating = false;
+                        reporting = true;
                     }
-
-                    fromAcc :> int continueSignal;
-                    t :> startTime;
-                    break; 
+                    break;
 
 	        case fromWorker[int i] :> confirm:
 	            if (iterating && !printAllImages) fromWorker[i] <: true;
                     else {
 	                fromWorker[i] <: false;
-                        fromWorker[i] :> threadCells[i];
+                    fromWorker[i] :> threadCells[i];
 	                closed++;
 	            }
 
 	            if (i == 0) {
                         toLEDs <: ledPattern;
                         rounds++;
-                        ledPattern = (ledPattern == led(0, 1, 0, 1)) ? led(0, 0, 0, 1) : led(0, 1, 0, 1);
+                        ledPattern = (ledPattern == led(0, 1, 0, 1)) ? led(0, 0, 0, 0) : led(0, 1, 0, 1);
 	            }
 	            break;
 
@@ -325,15 +315,40 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 	            break;	
 	        }
             }
-            t :> endTime;
-            timeElapsed += endTime-startTime;
 
-            toLEDs <: led(0, 0, 1, 0); //Blue LED when exporting image
-            passOutputState(c_out, fromWorker);
-            toLEDs <: led(0, 0, 0, 0);    		
+            t :> endTime;
+
+
+            if (reporting) {
+                reporting = false;
+                
+                toLEDs <: led(1, 0, 0, 0); //Red LED when paused
+                
+                timeElapsed += endTime-startTime;
+                timeElapsedFloat = timeElapsed;
+                int liveCells = sum(threadCells);
+
+                statusReport(rounds, liveCells, timeElapsedFloat);
+
+                fromAcc :> int continueSignal;
+
+                for (int i = 0; i<noOfThreads; i++) {
+                    fromWorker[i] <: 0;
+                }
+            }
+            else {
+                timeElapsed += endTime-startTime;
+
+                toLEDs <: led(0, 0, 1, 0); //Blue LED when exporting image
+                passOutputState(c_out, fromWorker);
+                toLEDs <: led(0, 0, 0, 0);          
+                
+            }
+
+            t :> startTime;
             iterating = true;
             closed = 0;
-            t :> startTime;
+            
     }
 }
 
