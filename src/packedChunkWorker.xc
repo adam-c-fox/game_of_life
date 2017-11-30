@@ -1,3 +1,11 @@
+/* 
+/   This is the packedChunkWorker for the concurrent Game of Life implementation
+/   Each section that the worker reads in, is stored in 8x8 'chunks', which are 
+/   iterated on indervidually.
+/   
+/   This module's could be improved through packing into ints instead of uchars.
+*/
+
 #include <platform.h>
 #include <xs1.h>
 #include <stdio.h>
@@ -9,6 +17,7 @@
 #include "utility.h"
 #include "packedChunkWorker.h"
 
+
 struct packedChunk {
     uchar left, right, top, bottom, corners;
     uchar row[8];
@@ -16,18 +25,7 @@ struct packedChunk {
 typedef struct packedChunk pChunk;
 
 
-
-static void unpack(uchar x, uchar cells[8]) {
-    for (int i = 0; i < 8; i++) {
-        cells[i] = (x >> (7 - i)) & 1;
-    }
-}
-
-static uchar extract(int n, uchar x) {
-    assert(n < 8);
-    return (x >> (7-n)) & 1;
-}
-
+//Debugging function for drawing a gird
 static void drawGrid(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     for (int yG = 0; yG < (IMHT/8); yG++) {
 
@@ -72,6 +70,9 @@ static void drawGrid(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 
 }
 
+
+//Sums the 8 squares neighbouring x,y in the ordinarry parts of a packed chunk
+//It is the responsibility of the caller to deal with chunk edge cases
 static int sumGroup(int x, int y, int x_min, int x_max, int y_min, int y_max, pChunk c) {
     int sum = 0;
     for (int j = y_min; j <= y_max; j++) {
@@ -82,7 +83,7 @@ static int sumGroup(int x, int y, int x_min, int x_max, int y_min, int y_max, pC
     return sum;
 }
 
-//Sums edge, includes 0 value corner
+//Sums an edge case, will add leftmost corner if boolean takeLeft is true 
 static int sumEdge(int n, uchar edge, uchar corner, bool takeLeft) {
     int sum = 0;
 
@@ -107,6 +108,7 @@ static int sumEdge(int n, uchar edge, uchar corner, bool takeLeft) {
     return sum;
 }
 
+//Sums all the neighbours x,y in a chunk
 static uchar sumNeighborsPacked(int x, int y, pChunk c) {
     int sum = 0;
     int bottom = y+1, left = x-1, top = y-1, right = x+1;
@@ -126,17 +128,14 @@ static uchar sumNeighborsPacked(int x, int y, pChunk c) {
     }
     if (bottom > 7) {
     	sum += sumEdge(x, c.bottom, extract(3, c.corners), true);
-        //printf("sum: %d | c.bottom: %d\n", sum, c.bottom);
         bottom--;            	
     }
 
     sum += sumGroup(x, y, left, right, top, bottom, c);
-    //printf("slowpls\n");
-
     return sum;
 }
 
-
+//Calculates the sum of the neighbours iterates based on game of life rules
 static pChunk iteratePChunk(pChunk c) {
     pChunk pre = c;
 
@@ -159,7 +158,7 @@ static pChunk iteratePChunk(pChunk c) {
 }
 
 
-//Iterate an array section
+//Iterate through every chunk of the array
 static void iteratePacked(int id, pChunk array[IMHT/8][(IMWD/noOfThreads)/8]) {
     for (int y = 0; y < IMHT/8; y++) {
         for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
@@ -183,6 +182,7 @@ static void readInPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]
     }
 }
 
+//Sends out corresponding segment of world
 static void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
      for (int y = 0; y < IMHT/8; y++) {
          for (int j = 0; j < 8; j++) {
@@ -197,6 +197,7 @@ static void sendOutPacked(chanend dist, pChunk grid[IMHT/8][(IMWD/noOfThreads)/8
      }
 }
 
+//Returns column n stored in a chunk
 static uchar getCol(int n, pChunk c) {
     uchar result = 0;
     for (int i = 0; i < 8; i++) {
@@ -205,6 +206,9 @@ static uchar getCol(int n, pChunk c) {
     return result;
 }
 
+//Fills in the corner field of each chunk
+//This implementation requires that the edges have correct values
+//This also requires that thread communication has already taken place
 static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     uchar cornersArray[8] = {0, 0, 0, 0};
 
@@ -244,7 +248,7 @@ static void linkCorners(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
 
 }
 
-// none of this is correct
+//Fills in the edges for each chunk, then calls linkCorners
 static void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
    for (int y = 0; y < IMHT/8; y++) {
         for (int x = 0; x < (IMWD/noOfThreads)/8; x++) {
@@ -264,6 +268,7 @@ static void linkChunks(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     linkCorners(grid);
 }
 
+//Pass and recieve edges to the thread on left and right, passing first
 static void passFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
     int last = (IMWD/noOfThreads)/8 - 1;
     for (int y = 0; y < IMHT/8; y++) {
@@ -275,6 +280,7 @@ static void passFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left,
     }
 }
 
+//Pass and recieve edges to the thread on left and right, recieving first
 static void receiveFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_left, chanend c_right) {
     int last = (IMWD/noOfThreads)/8 - 1;
     for (int y = 0; y < IMHT/8; y++) {
@@ -287,7 +293,7 @@ static void receiveFirst(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8], chanend c_le
 }
 
 //Counts the number of live cells stored by this worker
-int sumLive(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
+static int sumLive(pChunk grid[IMHT/8][(IMWD/noOfThreads)/8]) {
     int sum = 0;
     for (int y = 0; y < IMHT; y++) {
         for (int x = 0; x < (IMWD/noOfThreads); x++){
@@ -313,22 +319,22 @@ void packedChunkWorker(int id, chanend dist_in, chanend c_left, chanend c_right)
     	        receiveFirst(grid, c_left, c_right);
     	    } 
 
-                linkChunks(grid);
-                iteratePacked(id, grid);
-                
-                dist_in <: 1;
-    	        dist_in :> iterating;
+            linkChunks(grid);
+            iteratePacked(id, grid);
+            
+            dist_in <: 1;
+    	    dist_in :> iterating;
 
-        	}	
+        }	
         
-    dist_in <: sumLive(grid);
+        dist_in <: sumLive(grid);
 
-	int proceed;
-	dist_in :> proceed;
+	int sendingOut;
+	dist_in :> sendingOut;
 
-    if (proceed == 1){
-        sendOutPacked(dist_in, grid); 
-    }
+        if (sendingOut == 1) {
+            sendOutPacked(dist_in, grid); 
+        }
 
 	iterating = true;
     }
@@ -352,88 +358,6 @@ static void printByteRow(uchar a[8]) {
     }
     printf("%d", a[7]);
     printf("]\n");
-}
-
-
-static void testPack() {
-    uchar test[8];
-    set(test,0,0,0,0,0,0,0,0);
-    assert(pack(test) == 0);
-    set(test,0,0,0,0,0,0,0,1);
-    assert(pack(test) == 1);
-    set(test,1,0,0,0,0,0,0,0);
-    assert(pack(test) == 128);
-    set(test,0,0,0,0,0,0,0,255);
-    assert(pack(test) == 1);
-    set(test,0,0,0,0,0,0,1,0);
-    assert(pack(test) == 2);
-    set(test,1,1,1,1,1,1,1,1);
-    assert(pack(test) == 255);
-    set(test,0,0,0,1,0,0,1,0);
-    assert(pack(test) == 18);
-    set(test,0,0,0,255,0,0,255,0);
-    assert(pack(test) == 18);
-}
-
-static void testUnpack() {
-    uchar expected[8];
-    uchar result[8];
-    int test;
-
-    set(expected,0,0,0,0,0,0,0,0);
-    unpack(0, result);
-    test = memcmp(result, expected, 8);
-    assert(test == 0);
-
-    set(expected,0,0,0,0,0,0,0,1);
-    unpack(1, result);
-    test = memcmp(result, expected, 8);
-    assert(test == 0);
-
-    set(expected,1,0,0,0,0,0,0,0);
-    unpack(128, result);
-    test = memcmp(result, expected, 8);
-    assert(test == 0);
-    
-    set(expected,1,0,0,0,0,0,0,1);
-    unpack(129, result);
-    test = memcmp(result, expected, 8);
-    assert(test == 0);
-    
-    set(expected,1,1,1,1,1,1,1,1);
-    unpack(255, result);
-    test = memcmp(result, expected, 8);
-    assert(test == 0);
-}
-
-static void testExtract() {
-    uchar test;
-    test = 0;
-    assert(extract(0,test) == 0);
-    assert(extract(7,test) == 0);
-    assert(extract(5,test) == 0);
-    test = 1;
-    assert(extract(0,test) == 0);
-    assert(extract(7,test) == 1);
-    assert(extract(5,test) == 0);
-    test = 128;
-    assert(extract(0,test) == 1);
-    assert(extract(7,test) == 0);
-    assert(extract(5,test) == 0);
-    test = 130;
-    assert(extract(0,test) == 1);
-    assert(extract(7,test) == 0);
-    assert(extract(5,test) == 0);
-    assert(extract(6,test) == 1);
-    test = 255;
-    assert(extract(0,test) == 1);
-    assert(extract(1,test) == 1);
-    assert(extract(2,test) == 1);
-    assert(extract(3,test) == 1);
-    assert(extract(4,test) == 1);
-    assert(extract(5,test) == 1);
-    assert(extract(6,test) == 1);
-    assert(extract(7,test) == 1);
 }
 
 static void testSumNeighbors() {
@@ -514,7 +438,6 @@ static void testSumNeighbors() {
 } 
 
 
-//Needs further tests
 static void testLinkChunks() {
     pChunk array[IMHT/8][(IMWD/noOfThreads)/8];
     pChunk test;
@@ -641,9 +564,6 @@ static void testIteratePChunk() {
 }
 
 void testPackedChunkWorker() {
-    testPack();
-    testUnpack();
-    testExtract();
     testSumNeighbors();
     testLinkChunks();
     testIteratePChunk();

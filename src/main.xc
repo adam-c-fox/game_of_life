@@ -261,16 +261,27 @@ int sum(int threadCells[noOfThreads]) {
     return sum;
 }
 
-
-//Controls data flow between all threads
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons, chanend toLEDs) {
-    printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
-
+//Waits for button input
+void buttonInput(chanend fromButtons) {
     int buttonInput = 0;
     while (buttonInput != 14 && !debugMode) {
        	printf("Proceed with launch?\n");
     	fromButtons :> buttonInput;
     }
+}
+
+//Sends an int to all workers
+void sendAll(int n, chanend fromWorker[noOfThreads]) {
+    for (int i = 0; i<noOfThreads; i++) {
+        fromWorker[i] <: 0;
+    }
+}
+
+//Controls data flow between all threads
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorker[noOfThreads], chanend fromButtons, chanend toLEDs) {
+    printf("ProcessImage: Start, size = %dx%d\n", IMHT, IMWD);
+
+    buttonInput(fromButtons); 
     
     toLEDs <: led(0, 0, 0, 1);
 
@@ -355,9 +366,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
                 fromAcc :> int continueSignal;
 
-                for (int i = 0; i<noOfThreads; i++) {
-                    fromWorker[i] <: 0;
-                }
+                sendAll(0, fromWorker);
             }
             else {
                 timeElapsed += endTime-startTime;
@@ -391,6 +400,7 @@ void worker(int id, chanend dist_in, chanend c_left, chanend c_right) {
 //Runs unit tests for all modules
 void test() {
     testPackedChunkWorker();
+    testUtility();
     printf("All tests pass!\n");
 }
 

@@ -1,3 +1,12 @@
+/*
+/   This module is the unpackedWorker for the concurrent Game of Life implementation
+/   The implementation stores everything in an array unpacked, with extra columns each,
+/   for the neighbouring worker's cells.
+/   
+/   This module could be improved by packing communications between workers, but this is undecided
+/   as it as not been benchmarked.
+*/
+
 #include <platform.h>
 #include <xs1.h>
 #include <stdio.h>
@@ -69,9 +78,43 @@ static void readIn(chanend dist_in, uchar grid[IMHT][IMWD/noOfThreads+2]) {
     }
 }
 
+//Pass and recieve edges to the thread on left and right, passing first
+static void passFirst(uchar grid[IMHT][(IMWD/noOfThreads)+2], chanend c_left, chanend c_right) {
+    int colWidth = (IMWD/noOfThreads); 
+    for (int y = 0; y<IMHT; y++) {
+        c_right <: grid[y][colWidth];
+        c_left  :> grid[y][0];
+
+        c_right :> grid[y][colWidth+1];
+        c_left  <: grid[y][1];
+    }
+}
+
+//Pass and recieve edges to the thread on left and right, recieving first
+static void recieveFirst(uchar grid[IMHT][(IMWD/noOfThreads)+2], chanend c_left, chanend c_right) {
+    int colWidth = (IMWD/noOfThreads); 
+    for (int y = 0; y<IMHT; y++) {
+        c_left :> grid[y][0];
+        c_right <: grid[y][colWidth];
+
+        c_left  <: grid[y][1];
+        c_right :> grid[y][colWidth+1];
+    }
+}
+
+//Counts the number of live cells stored by this worker
+static int sumLive(uchar grid[IMHT][(IMWD/noOfThreads)+2]) {
+    int sum = 0;
+    for (int y = 0; y < IMHT; y++) {
+        for (int x = 1; x < (IMWD/noOfThreads) + 1; x++){
+            if (grid[y][x]) sum++;
+        }
+    }
+    return sum;
+}
 
 void unpackedWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
-    int colWidth = (IMWD/noOfThreads); //Adam remember to remove if needed
+    int colWidth = (IMWD/noOfThreads); 
     uchar grid[IMHT][(IMWD/noOfThreads)+2];
 
     readIn(dist_in, grid);
@@ -82,22 +125,10 @@ void unpackedWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
             //If even column: pass to right, then read from left
             //If odd column : read from left, then pass to right
             if ((id % 2) == 0) {
-                for (int y = 0; y<IMHT; y++) {
-                    c_right <: grid[y][colWidth];
-                    c_left  :> grid[y][0];
-
-                    c_right :> grid[y][colWidth+1];
-                    c_left  <: grid[y][1];
-                }
+    	        passFirst(grid, c_left, c_right);
             }
             else {
-                for (int y = 0; y<IMHT; y++) {
-                    c_left :> grid[y][0];
-                    c_right <: grid[y][colWidth];
-
-                    c_left  <: grid[y][1];
-                    c_right :> grid[y][colWidth+1];
-                }
+    	        recieveFirst(grid, c_left, c_right);
             } 
 
             iterate(grid);
@@ -106,10 +137,15 @@ void unpackedWorker(int id, chanend dist_in, chanend c_left, chanend c_right) {
             dist_in :> iterating;
         }
 
-        int proceed;
-        dist_in :> proceed;
+        dist_in <: sumLive(grid);
 
-        sendOut(dist_in, grid); 
+        int sendingOut;
+        dist_in :> sendingOut;
+
+        if (sendingOut == 1) {
+            sendOut(dist_in, grid); 
+        }
+
         iterating = true;
     }
 }
