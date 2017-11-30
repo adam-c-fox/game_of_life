@@ -167,7 +167,7 @@ void DataInStream(char infname[], chanend c_out) {
     if (!generateOnBoard) {
         res = _openinpgm(infname, IMWD, IMHT);
         if (res) {
-            printf("DataInStream: Error openening %s\n.", infname);
+            printf("DataInStream: Error opening %s\n.", infname);
             return;
         }
   
@@ -405,16 +405,16 @@ int main(void) {
     par {
         on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);
         on tile[0]: orientation(i2c[0],c_control);      
-        on tile[0]: DataInStream(INPUT, c_inIO);       
+        on tile[1]: DataInStream(INPUT, c_inIO);       
         on tile[0]: DataOutStream(OUTPUT, c_outIO);   
-        on tile[0]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);
+        on tile[1]: distributor(c_inIO, c_outIO, c_control, dist, c_buttons, c_leds);
 
-        //on tile[0]: if (debugMode) test();
+        on tile[0]: if (debugMode) test();
 
         on tile[0]: buttonListener(buttons, c_buttons);
         on tile[0]: showLEDs(leds, c_leds);
     
-        on tile[1]: par (int i = 0; i < (noOfThreads/2); i++) {
+        on tile[0]: par (int i = 0; i < (noOfThreads/2); i++) {
             worker(i, dist[i], workerChan[i], workerChan[(i+1)%noOfThreads]);
         }
 
