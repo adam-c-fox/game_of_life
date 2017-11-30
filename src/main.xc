@@ -1,5 +1,8 @@
-// COMS20001 - Cellular Automaton Farm - Initial Code Skeleton
-// (using the XMOS i2c accelerometer demo code)
+/*
+/  Adam Beddoe and Adam Fox's concurrent implementation of the Game of Life
+/       Config file (config.h) specifies image size and settings
+/
+*/
 
 #include <platform.h>
 #include <xs1.h>
@@ -9,7 +12,6 @@
 #include <assert.h>
 #include <string.h>
 #include "packedChunkWorker.h"
-#include "packedColWorker.h"
 #include "unpackedWorker.h"
 #include "utility.h"
 #include "config.h"
@@ -73,49 +75,49 @@ void buttonListener(in port b, chanend toDistributor) {
 
 // Initialise and  read orientation, send first tilt event to channel
 void orientation(client interface i2c_master_if i2c, chanend toDist) {
-  i2c_regop_res_t result;
-  char status_data = 0;
-  int tilted = 0;
+    i2c_regop_res_t result;
+    char status_data = 0;
+    int tilted = 0;
 
-  // Configure FXOS8700EQ
-  result = i2c.write_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_XYZ_DATA_CFG_REG, 0x01);
-  if (result != I2C_REGOP_SUCCESS) {
-    printf("I2C write reg failed\n");
-  }
-  
-  // Enable FXOS8700EQ
-  result = i2c.write_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_CTRL_REG_1, 0x01);
-  if (result != I2C_REGOP_SUCCESS) {
-    printf("I2C write reg failed\n");
-  }
-
-  //Probe the orientation x-axis for ever
-  while (1) {
-
-    //check until new orientation data is available
-    do {
-      status_data = i2c.read_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_DR_STATUS, result);
-    } while (!status_data & 0x08);
-
-    //get new x-axis tilt value
-    int x = read_acceleration(i2c, FXOS8700EQ_OUT_X_MSB);
-
-    //send signal to distributor after first tilt
-    if (!tilted) {
-      if (x>30) {
-        tilted = 1 - tilted;
-        toDist <: 1;
-      }
+    // Configure FXOS8700EQ
+    result = i2c.write_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_XYZ_DATA_CFG_REG, 0x01);
+    if (result != I2C_REGOP_SUCCESS) {
+        printf("I2C write reg failed\n");
+    }
+    
+    // Enable FXOS8700EQ
+    result = i2c.write_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_CTRL_REG_1, 0x01);
+    if (result != I2C_REGOP_SUCCESS) {
+        printf("I2C write reg failed\n");
     }
 
-    if (tilted) {
-        if (x<30) {
-            tilted = 1 - tilted;
-            toDist <: 0;
+    //Probe the orientation x-axis for ever
+    while (1) {
+
+        //check until new orientation data is available
+        do {
+            status_data = i2c.read_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_DR_STATUS, result);
+        } while (!status_data & 0x08);
+
+        //get new x-axis tilt value
+        int x = read_acceleration(i2c, FXOS8700EQ_OUT_X_MSB);
+
+        //send signal to distributor after first tilt
+        if (!tilted) {
+            if (x>30) {
+                tilted = 1 - tilted;
+                toDist <: 1;
+            }
         }
-    }
 
-  }
+        if (tilted) {
+            if (x<30) {
+                tilted = 1 - tilted;
+                toDist <: 0;
+            }
+        }
+
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -274,7 +276,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
 
     passInitialState(c_in, fromWorker); 
 
-    int closed = 0, rounds = 0, liveCells = 0, confirm = 0, ledPattern = led(0, 1, 0, 1);
+    int closed = 0, rounds = 0, confirm = 0, ledPattern = led(0, 1, 0, 1);
     int threadCells[noOfThreads];
     bool iterating = true, reporting = false;
     timer t;
@@ -373,6 +375,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend fromWorke
     }
 }
 
+//Selects appropriate worker based on image size
 void worker(int id, chanend dist_in, chanend c_left, chanend c_right) {
     if (IMHT <= 256 || IMWD <= 256) unpackedWorker(id, dist_in, c_left, c_right);
     else packedChunkWorker(id, dist_in, c_left, c_right);
