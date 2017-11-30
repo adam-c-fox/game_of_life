@@ -306,20 +306,20 @@ void packedChunkWorker(int id, chanend dist_in, chanend c_left, chanend c_right)
     while (1) {
         while (iterating) {
 
-	    if ((id % 2) == 0) {
-	        passFirst(grid, c_left, c_right);
-	    }
-	    else {
-	        receiveFirst(grid, c_left, c_right);
-	    } 
+    	    if ((id % 2) == 0) {
+    	        passFirst(grid, c_left, c_right);
+    	    }
+    	    else {
+    	        receiveFirst(grid, c_left, c_right);
+    	    } 
 
-            linkChunks(grid);
-            iteratePacked(id, grid);
-            
-            dist_in <: 1;
-	    dist_in :> iterating;
+                linkChunks(grid);
+                iteratePacked(id, grid);
+                
+                dist_in <: 1;
+    	        dist_in :> iterating;
 
-    	}	
+        	}	
         
     dist_in <: sumLive(grid);
 
