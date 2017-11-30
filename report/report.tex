@@ -61,15 +61,32 @@ This implementation uses bit packing, and splitting the image up into chunks, ma
 Packing into an unsigned char (uchar) it is possible to store 8 values in each, drastically reducing the memory required but adding computational complexity by computing the packing and unpacking, and the copying of edges between chunks each round. The \emph{left, right, top, bottom} variables hold the corresponding edge of the neighbouring chunk and the 4 most significant bits in \emph{corners} store the 4 adjacent corners. The storing of the neighbours for each chunk rather than the whole array means that the base array takes up more space, however only one chunk needs to be loaded into memory when iterating, rather than making a copy of the entire worker's array.
 
 
-\newgeometry{top=20mm,left=20mm,right=20mm,bottom=20mm} 
+\newgeometry{top=12mm,left=20mm,right=20mm,bottom=20mm} 
 \pagebreak
 \section{Tests \& Experiments}
 \subsection{Packed vs. Unpacked}
-In order to see which of the approaches is faster, the differing speeds of iteration were measured while changing three main parameters: Packed/Unpacked implementation, number of worker threads and size of image. Below is the data collected (values in seconds): 
+As shown in \emph{Table 1 \& 2} across the same size images the unpacked implementation is faster than the packed one. By packing communications before they are sent on a channel, communication time is reduced. However packing the data incurs additional computation cost, furthermore the implementation requires copying of the edges between chunks for each iteration. A combination of these two effects explains the results in the tables. 
 
+It was also expected that as image size increased the packing approach would eventually outperform unpacked, due to increased communication. As seen in \emph{Figure 2} this is not the case; the computational packing cost always overshadows the packed communication performance improvement.
+
+\vspace{-4mm}
+\subsection{No. of threads}
+\vspace{-3mm}
+Looking at \emph{Figure 1} it can be seen that the performance gains from a greater number of threads, is more evident for the packed worker. As the number of threads increases, the overriding limiting factor is the communication between worker threads. The packed worker achieves greater gains as less data is sent over the channels. Though it is not possible to test with the current implementation, it is suspected that increasing the number of threads would eventually decrease performance, for the reason previously mentioned.
+
+The program does not allow more than 2 threads to operate on the 16x16 image, however this is not problematic for such a small image as more data would be communicated between threads than is operated on within them. This would decrease performance.
+
+\vspace{-4mm}
+\subsection{Inter-tile vs. Intra-tile communication}
+\vspace{-3mm}
+When performing benchmarks on inter/intra tile communication, it was discovered that while intra-tile is faster, the effect is almost negligible compared to other limited factors. When tested on the provided 128x128 image utilising 2 threads, intra-tile was only 0.146\% faster.
+
+\vspace{-4mm}
+\subsection{Tables}
+\vspace{-3mm}
 
 \begin{center}
-No of threads
+No. of threads
 \end{center}
 
 \begin{table}[!th]
@@ -88,7 +105,7 @@ Image size
 \vspace{4mm}
 
 \begin{center}
-No of threads
+No. of threads
 \end{center}
 
 \begin{table}[!th]
@@ -110,11 +127,19 @@ Image size
 \pagebreak
 \subsection{Graphs}
 
+\begin{multicols}{2}
+
 \begin{Figure}
-\includegraphics[width=9cm]{images/64x64graph.png}
-\captionof{figure}{16x16}
+\includegraphics[height=7cm]{images/64x64graph.png}
+\captionof{figure}{64x64 - Packed vs. Unpacked}
 \end{Figure}
 
+\begin{Figure}
+\includegraphics[height=7cm]{images/graph1.png}
+\captionof{figure}{256x256 - Intra vs Inter }
+\end{Figure}
+
+\end{multicols}
 
 
 \subsection{2 Round Images}
@@ -163,7 +188,19 @@ As required, below are the second round images for all of the provided example i
 
 \pagebreak
 \section{Critical Analysis}
-Through testing, it was determined that the additional time complexity of packing and unpacking meant that the
+With the -O3 compiler flag and correctly distributed functions across two tiles, the program can achieve a maximum image size of 1472 x 1472. The fastest it can iterate a 16x16 image is with two threads at approximately 2700 rounds per second.
+
+It was initially expected that the packedChunkWorker would be the fastest implementation for all but the smallest images. Through benchmarking, it was determined that the additional time complexity of packing and unpacking, and inter-chunk edge sharing, meant that the packedChunkWorker was slower than the unpackedWorker. Implementing the dynamic selection of the worker function based on file size means that the program uses the fastest available and will use the unpacked version up to file sizes less than or equal to 256 x 256.
+
+Another dynamic improvement that could be made, which XC does not currently allow (but should), is the ability to decide which tiles the functions will run on dynamically. Currently, the program will run half of the worker threads on tile 0 and half on tile 1, which means two threads will have to communicate cross tile. This is required by our implementation in order to make use of the memory on both tiles for larger images, however, is slower for images where this is not required. Even though cross-tile communication is only marginally slower than intra-tile, it would still be advantageous to place all the threads on the same tile, in the case that image is less than or equal to a 256 square; which is known at compile time.
+
+The memory usuage of packedChunkWorker, and thus the maximum image size, could be greatly improved by packing into ints or longs, rather than uchar. This is because it currently requires 5 extra bytes for every 64 grid bits stored, but by packing into an int, it would require only 5 per 1024 while still not needing to copy the entire grid for iteration.
+
+Another improvement that could be made would be to create a third dynamic worker, which iterated in smaller packed columns rather than chunks. This would not be as memory efficient, but would be linear complexity on size of image for sharing between sections, as opposed to squared complexity for chunks.
+
+It may have been faster, for some medium sized images, to only pack the communication between threads and store unpacked values. This would greatly reduce the channel communication overhead between sharing threads at the start of an iteration, but still remain fast for the summation calculations. However as it has not been implemented or benchmarked, it is unclear whether the packing overhead would have negated any performance benefits for images of that size.
+
+The program is limited in how the number of threads must be a power of 2. This means that it was not possible to test 10 threads. The input size is also quite limiting, as it must be a multiple of the number of threads (a multiple of the number of threads * 8 for larger than 256). However, implementing these changes would greatly increase the complexity of the code, and potentially decrease efficiency.
 
 
 

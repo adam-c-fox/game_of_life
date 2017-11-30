@@ -164,7 +164,7 @@ void DataInStream(char infname[], chanend c_out) {
     if (!generateOnBoard) {
         res = _openinpgm(infname, IMWD, IMHT);
         if (res) {
-            printf("DataInStream: Error openening %s\n.", infname);
+            printf("DataInStream: Error opening %s\n.", infname);
             return;
         }
   
